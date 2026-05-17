@@ -2,9 +2,9 @@
 
 <a href="https://fredy.orange-coding.net/">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/orangecoding/fredy/blob/master/doc/logo_white.png" width="400">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/orangecoding/fredy/blob/master/doc/logo.png" width="400">
-  <img alt="Jetbrains Open Source" src="https://github.com/orangecoding/fredy/blob/master/doc/logo.png">
+  <source media="(prefers-color-scheme: dark)" srcset="doc/logo_white.png" width="400">
+  <source media="(prefers-color-scheme: light)" srcset="doc/logo.png" width="400">
+  <img alt="Jetbrains Open Source" src="doc/logo.png">
 </picture>
 </a>
 </p>
@@ -15,10 +15,9 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/orangecoding/fredy/actions/workflows/test.yml/badge.svg" alt="Tests" />
-  <img src="https://github.com/orangecoding/fredy/actions/workflows/docker.yml/badge.svg" alt="Docker" />
-  <img src="https://github.com/orangecoding/fredy/actions/workflows/check_source.yml/badge.svg" alt="Source" />
-  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Forangecoding%2Ffredy%2Ffredy&query=%24.downloadCount&label=Docker%20Pulls" alt="Docker Pulls" />
+  <img src="https://github.com/jhytabest/ShoberFredy/actions/workflows/test.yml/badge.svg" alt="Tests" />
+  <img src="https://github.com/jhytabest/ShoberFredy/actions/workflows/docker.yml/badge.svg" alt="Docker" />
+  <img src="https://github.com/jhytabest/ShoberFredy/actions/workflows/check_source.yml/badge.svg" alt="Source" />
 </p>
 
 
@@ -78,14 +77,10 @@ You can try out Fredy here: [Fredy Demo](https://fredy-demo.orange-coding.net/)
 ### With Docker
 
 > [!NOTE]
-> In order to start Fredy, you must provide a config.json. As a start, use the one in this repo: https://github.com/orangecoding/fredy/blob/master/conf/config.json
+> In order to start Fredy, you must provide a config.json. As a start, use the one in this repo at `conf/config.json`.
 
 ``` bash
-docker run -d --name fredy \
-  -v fredy_conf:/conf \
-  -v fredy_db:/db \
-  -p 9998:9998 \
-  ghcr.io/orangecoding/fredy:master
+docker compose up -d --build
 ```
 
 Logs:
@@ -165,7 +160,7 @@ For more information on how to set it up and use it, please refer to the [MCP Re
 
 ## Immoscout
 
-Immoscout has implemented advanced bot detection. In order to work around this, we are using a reversed engineered version of their mobile api. See [Immoscout Reverse Engineering Documentation](https://github.com/orangecoding/fredy/blob/master/reverse-engineered-immoscout.md)
+Immoscout has implemented advanced bot detection. In order to work around this, we are using a reversed engineered version of their mobile api. See [Immoscout Reverse Engineering Documentation](reverse-engineered-immoscout.md).
 
 ## Analytics
 
@@ -260,14 +255,4 @@ I’ve had one too many PRs full of hallucinated bullshit.
 
 Thanks to everyone who has contributed!
 
-<a href="https://github.com/orangecoding/fredy/graphs/contributors"><img src="https://contrib.rocks/image?repo=orangecoding/fredy" /></a>
-
-See the [Contributing
-Guide](https://github.com/orangecoding/fredy/blob/master/CONTRIBUTING.md).
-
-------------------------------------------------------------------------
-
-## ⭐ Star History
-
-[![Star History
-Chart](https://api.star-history.com/svg?repos=orangecoding/fredy&type=Date)](https://www.star-history.com/#orangecoding/fredy&Date)
+See the [Contributing Guide](CONTRIBUTING.md).

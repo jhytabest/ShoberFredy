@@ -18,5 +18,6 @@ jobs:
           node-version: 22
           cache: 'yarn'
 
+      - run: corepack enable
       - run: yarn install
       - run: yarn test:offline

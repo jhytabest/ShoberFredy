@@ -3,7 +3,7 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   useSearchParamState,
   parseNumber,
@@ -64,6 +64,7 @@ const ListingsOverview = ({ mode = 'all' }) => {
   const [hiddenOnly, setHiddenOnly] = useSearchParamState(sp, 'hidden', false, parseNullableBoolean);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [listingToDelete, setListingToDelete] = useState(null);
+  const [newAvailableCount, setNewAvailableCount] = useState(0);
 
   const isHiddenView = hiddenOnly === true;
 
@@ -90,6 +91,7 @@ const ListingsOverview = ({ mode = 'all' }) => {
 
   useEffect(() => {
     loadData();
+    setNewAvailableCount(0);
   }, [
     page,
     sortField,
@@ -103,6 +105,41 @@ const ListingsOverview = ({ mode = 'all' }) => {
     hiddenOnly,
     isWatchlistMode,
   ]);
+
+  const loadDataRef = useRef(loadData);
+  useEffect(() => {
+    loadDataRef.current = loadData;
+  }, [loadData]);
+
+  // SSE connection for live listings updates
+  useEffect(() => {
+    const src = new EventSource('/api/jobs/events');
+
+    const onNewListings = (e) => {
+      try {
+        const data = JSON.parse(e.data || '{}');
+        if (data && data.count) {
+          setNewAvailableCount((prev) => prev + data.count);
+        }
+      } catch {
+        // ignore malformed events
+      }
+    };
+
+    src.addEventListener('listings:new', onNewListings);
+    src.onerror = () => {
+      // Let browser auto-reconnect
+    };
+
+    return () => {
+      try {
+        src.removeEventListener('listings:new', onNewListings);
+        src.close();
+      } catch {
+        // noop
+      }
+    };
+  }, [t]);
 
   const handleFilterChange = useMemo(
     () =>
@@ -365,6 +402,32 @@ const ListingsOverview = ({ mode = 'all' }) => {
           </Tooltip>
         </div>
       </div>
+
+      {newAvailableCount > 0 && (
+        <Banner
+          type="info"
+          fullMode={false}
+          closeIcon={null}
+          description={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <span>{t('listings.newAvailableBanner', { count: newAvailableCount })}</span>
+              <Button
+                size="small"
+                theme="solid"
+                type="primary"
+                onClick={() => {
+                  loadDataRef.current();
+                  setNewAvailableCount(0);
+                }}
+                style={{ marginLeft: 16 }}
+              >
+                {t('listings.reloadButton')}
+              </Button>
+            </div>
+          }
+          style={{ marginBottom: 12 }}
+        />
+      )}
 
       {isHiddenView && (
         <Banner

@@ -1,4 +1,8 @@
-name: Create and publish Docker image
+name: Build and publish Docker image
+
+# Builds ghcr.io/jhytabest/shoberfredy on every master push (and tags).
+# Deployment to the homeserver stays in the homeserver repo: its
+# services/fredy compose pulls this image instead of patching upstream.
 
 on:
   push:
@@ -6,6 +10,7 @@ on:
       - 'master'
     tags:
       - '*'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -24,18 +29,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: linux/amd64,linux/arm64
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -43,56 +43,51 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
+      # Homeserver is a single amd64 box; skipping arm64 halves build time.
       - name: Build and push Docker image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Test container health with docker compose
-      - name: Test container with docker compose
+      - name: Smoke-test container health with docker compose
         run: |
           echo "Starting container with docker compose..."
           mkdir -p ./db ./conf && chmod 777 ./db ./conf
-          docker compose up --build -d
-          echo "Waiting for container to be ready (60 seconds for start_period)..."
+          docker compose up --build -d shoberfredy
+          echo "Waiting for container start_period..."
           sleep 60
 
-          echo "Monitoring container health for 30 seconds..."
           SECONDS_ELAPSED=0
-          HEALTH_CHECK_INTERVAL=5
           TOTAL_DURATION=30
-          
           while [ $SECONDS_ELAPSED -lt $TOTAL_DURATION ]; do
-            HEALTH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' fredy 2>/dev/null || echo "not_found")
-            CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' fredy 2>/dev/null || echo "not_found")
+            HEALTH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' shoberfredy 2>/dev/null || echo "not_found")
+            CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' shoberfredy 2>/dev/null || echo "not_found")
             echo "[$SECONDS_ELAPSED/$TOTAL_DURATION sec] Container: $CONTAINER_STATUS, Health: $HEALTH_STATUS"
-            
-            # Check if container is not running or unhealthy
+
             if [ "$CONTAINER_STATUS" != "running" ]; then
               echo "Container stopped running! Status: $CONTAINER_STATUS"
-              docker compose logs fredy
+              docker compose logs shoberfredy
               exit 1
             fi
-            
+
             if [ "$HEALTH_STATUS" = "unhealthy" ]; then
               echo "Container is unhealthy!"
-              docker compose logs fredy
-              docker inspect --format='{{json .State.Health}}' fredy | jq
+              docker compose logs shoberfredy
               exit 1
             fi
-            
-            sleep $HEALTH_CHECK_INTERVAL
-            SECONDS_ELAPSED=$((SECONDS_ELAPSED + HEALTH_CHECK_INTERVAL))
-          done
 
+            sleep 5
+            SECONDS_ELAPSED=$((SECONDS_ELAPSED + 5))
+          done
+          echo "Container healthy."
           docker compose down

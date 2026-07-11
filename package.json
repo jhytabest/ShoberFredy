@@ -1,5 +1,5 @@
 {
-  "name": "fredy",
+  "name": "shoberfredy",
   "version": "22.9.7",
   "description": "Fredy - [F]ind [R]eal [E]state [D]amn Eas[y] - Fredy keeps searching for new apartments, houses, and flats in Germany on platforms like ImmoScout24, Immowelt, Immonet, eBay Kleinanzeigen, and WG-Gesucht and instantly delivers the results to you via Slack, Telegram, Email, Discord or ntfy, so you can focus on the more important things in life ;)",
   "scripts": {
@@ -19,6 +19,11 @@
     "lint:fix": "yarn lint --fix",
     "migratedb": "node lib/services/storage/migrations/migrate.js",
     "migratedb:overwrite": "x-var MIGRATION_ALLOW_CHECKSUM_UPDATE=true node lib/services/storage/migrations/migrate.js",
+    "market:model": "node tools/market/marketModel.js run",
+    "market:model:daemon": "node tools/market/marketModel.js daemon",
+    "market:exporter": "node tools/market/marketExporter.js",
+    "geocode:backfill": "node tools/market/geocoderBackfill.js run",
+    "migrate:import": "node tools/migrate/importLegacyDb.js",
     "copyright": "node ./copyright.js",
     "release": "node ./tools/release/release.js"
   },

@@ -1,3 +1,33 @@
+# Shoberfredy 🐕🏡
+
+**Shoberfredy** is a private, shiba-inu-themed fork of
+[orangecoding/fredy](https://github.com/orangecoding/fredy) tuned for a single
+personal homeserver deployment (Berlin rental market). On top of upstream
+Fredy it adds, natively in the source tree:
+
+- **Google Geocoding** with a persistent cache (`homeserver_geocode_cache`),
+  Berlin-aware plausibility checks, and fail-open behavior when Google is
+  unavailable (listings are kept, not silently dropped by the spatial filter).
+- **Save-time market scoring**: every stored listing is priced against a
+  persisted hedonic + spatial-residual model; notifications carry a
+  `Model: … €/m² vs fair … €/m²` metrics line.
+- **Cross-portal dedupe**: a flat already notified from another portal/job in
+  the last 7 days is soft-hidden instead of re-notified.
+- **Market model daemon** (`yarn market:model:daemon`): geo-surface-v3 robust
+  ridge regression + adaptive kernel residual field, with holdout/spatial-CV
+  self-evaluation, surface GeoJSON for Grafana.
+- **Prometheus exporter** (`yarn market:exporter`): market, scraper-health,
+  geocode and prediction metrics on `:9217/metrics`.
+- **Geocode backfill CLI** (`yarn geocode:backfill`) and a **legacy DB import
+  tool** (`yarn migrate:import --source /path/to/listings.db`).
+- Token-aware German blacklist matching (`wg`, `befristet`), detail-scrape
+  resilience, SQLite `busy_timeout` for multi-process access.
+
+Upstream docs below still apply. Credit and license: Christian Kellner,
+Apache-2.0 with Commons Clause and Attribution/Naming Clause.
+
+---
+
 <p align="center">
 
 <a href="https://fredy.orange-coding.net/">

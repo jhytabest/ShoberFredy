@@ -93,9 +93,10 @@ describe('SqliteConnection', () => {
     const db2 = SqliteConnection.getConnection();
 
     expect(db1).toBe(db2);
-    // journal_mode, synchronous, cache_size, foreign_keys, optimize
+    // journal_mode, busy_timeout, synchronous, cache_size, foreign_keys, optimize
     expect(calls.db.pragma).toEqual([
       'journal_mode = WAL',
+      'busy_timeout = 30000',
       'synchronous = NORMAL',
       'cache_size = -64000',
       'foreign_keys = ON',

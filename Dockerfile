@@ -32,6 +32,12 @@ RUN yarn config set network-timeout 600000 \
   && yarn --frozen-lockfile \
   && yarn cache clean
 
+# The ADD re-fetches the npm manifest on every build, so this layer's cache
+# busts exactly when a new CloakBrowser version is published — each deploy
+# rebuild then installs the latest release (bot-detection evasion decays fast).
+ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
+RUN npm install --no-audit --no-fund --no-save cloakbrowser@latest
+
 # Pre-download the CloakBrowser stealth Chromium binary (supports x86_64 and arm64)
 RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())"
 
@@ -47,6 +53,13 @@ COPY lib ./lib
 RUN yarn build:frontend
 
 COPY index.js ./
+COPY tools ./tools
+
+# Dedicated unprivileged user so the hardened homeserver compose
+# (user: 10001:10001, read-only rootfs) works out of the box.
+RUN groupadd -g 10001 homeserver \
+  && useradd -u 10001 -g homeserver -d /home/homeserver -M -s /usr/sbin/nologin homeserver \
+  && install -d -o 10001 -g 10001 /home/homeserver
 
 RUN ln -s /db /fredy/db \
   && ln -s /conf /fredy/conf

@@ -6,8 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Nav } from '@douyinfe/semi-ui-19';
 import { IconStar, IconSetting, IconTerminal, IconHistogram, IconSidebar } from '@douyinfe/semi-icons';
-import logoWhite from '../../assets/logo_white.png';
-import heart from '../../assets/heart.png';
+import ShibaLogo, { ShibaHead } from '../logo/ShibaLogo.jsx';
 import Logout from '../logout/Logout.jsx';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -104,7 +103,7 @@ export default function Navigation({ isAdmin }) {
       }}
       header={
         <div className="navigate__header">
-          <img src={collapsed ? heart : logoWhite} width={collapsed ? 30 : 160} alt="Fredy Logo" />
+          {collapsed ? <ShibaHead size={30} /> : <ShibaLogo width={160} white />}
         </div>
       }
       footer={

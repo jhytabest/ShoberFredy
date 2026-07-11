@@ -44,5 +44,13 @@ export default [
     },
   },
 
+  // Standalone CLIs/daemons report via stdout by design.
+  {
+    files: ['tools/market/**/*.js', 'tools/migrate/**/*.js'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
   prettier,
 ];

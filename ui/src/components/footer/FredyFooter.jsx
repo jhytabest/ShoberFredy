@@ -15,7 +15,7 @@ export default function FredyFooter() {
 
   return (
     <Footer className="fredyFooter">
-      <span className="fredyFooter__version">Fredy v{version?.localFredyVersion || t('common.na')}</span>
+      <span className="fredyFooter__version">Shoberfredy v{version?.localFredyVersion || t('common.na')} 🐕</span>
       <span className="fredyFooter__credit">
         {t('footer.madeWith')}{' '}
         <a href="https://github.com/orangecoding" target="_blank" rel="noreferrer">

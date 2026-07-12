@@ -32,15 +32,6 @@ RUN yarn config set network-timeout 600000 \
   && yarn --frozen-lockfile \
   && yarn cache clean
 
-# The ADD re-fetches the npm manifest on every build, so this layer's cache
-# busts exactly when a new CloakBrowser version is published — each deploy
-# rebuild then installs the latest release (bot-detection evasion decays fast).
-ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
-RUN npm install --no-audit --no-fund --no-save cloakbrowser@latest
-
-# Pre-download the CloakBrowser stealth Chromium binary (supports x86_64 and arm64)
-RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())"
-
 # Purge build tools now that native modules are compiled
 RUN apt-get purge -y python3 make g++ \
   && apt-get autoremove -y \
@@ -51,6 +42,19 @@ COPY ui ./ui
 COPY lib ./lib
 
 RUN yarn build:frontend
+
+# The ADD re-fetches the npm manifest on every build, so this layer's cache
+# busts exactly when a new CloakBrowser version is published — each deploy
+# rebuild then installs the latest release (bot-detection evasion decays fast).
+# Runs AFTER the frontend build: with NODE_ENV=production npm prunes the dev
+# dependencies (vite, less, ...) that the build still needs.
+# --legacy-peer-deps: pre-existing dev peer conflict (eslint 10 vs
+# eslint-plugin-react) otherwise aborts the install.
+ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
+RUN npm install --no-audit --no-fund --no-save --legacy-peer-deps cloakbrowser@latest
+
+# Pre-download the CloakBrowser stealth Chromium binary (supports x86_64 and arm64)
+RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())"
 
 COPY index.js ./
 COPY tools ./tools

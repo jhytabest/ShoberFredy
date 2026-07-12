@@ -114,7 +114,7 @@ export default function FredyApp() {
                       type="info"
                       bordered
                       closeIcon={null}
-                      description="You're currently viewing the demo version of Fredy. Jobs won't scrape websites, and any changes you make will be reverted at midnight."
+                      description="You're currently viewing the demo version of Shoberfredy. Jobs won't scrape websites, and any changes you make will be reverted at midnight."
                     />
                     <br />
                   </>

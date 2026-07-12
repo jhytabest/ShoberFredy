@@ -18,7 +18,7 @@
 import { addressKey } from '../../lib/services/geocoding/address.js';
 import { geocodeAddress, GeocodeUnavailableError } from '../../lib/services/geocoding/client/googleClient.js';
 import { ensureCacheTable, getUsableCache, saveCache } from '../../lib/services/geocoding/geocodeCache.js';
-import { resolveDbPath, openToolDb } from './toolDb.js';
+import { resolveDbPath, openToolDb } from '../../lib/services/market/marketDb.js';
 
 const config = {
   dbPath: process.env.FREDY_GEOCODER_DB_PATH || (await resolveDbPath()),

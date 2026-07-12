@@ -17,6 +17,8 @@ import { getSettings } from './lib/services/storage/settingsStorage.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
+import { startMetricsExporter } from './lib/services/market/metricsExporter.js';
+import { initMarketModel, runMarketModelOnce, marketModelIntervalSeconds } from './lib/services/market/marketModel.js';
 
 // Ensure the CloakBrowser stealth Chromium binary is present and complete before
 // jobs run.  ensureValidBinary() also detects and auto-heals partial extractions
@@ -77,6 +79,39 @@ await initTrackerCron();
 //do not wait for this to finish, let it run in the background
 initActiveCheckerCron();
 initGeocodingCron();
+
+// Market services (single-container mode): Prometheus exporter on its own
+// port and the periodic market model retrain, both in-process.
+// FREDY_MARKET_EXPORTER_PORT=0 / FREDY_MARKET_MODEL_INTERVAL_SECONDS=0
+// disable them (e.g. when running the standalone CLI daemons instead).
+try {
+  const metricsServer = await startMetricsExporter();
+  if (metricsServer) {
+    logger.info(`Market metrics exporter listening on :${metricsServer.address().port}/metrics`);
+  }
+} catch (error) {
+  logger.error('Failed to start market metrics exporter; continuing without it', error);
+}
+
+if (process.env.FREDY_MARKET_MODEL_INTERVAL_SECONDS !== '0') {
+  try {
+    await initMarketModel();
+    const retrain = () => {
+      try {
+        runMarketModelOnce();
+      } catch (error) {
+        logger.error('Market model retrain failed; keeping previous model state', error);
+      }
+    };
+    // First retrain shortly after boot (off the critical startup path), then
+    // on the configured interval (default daily).
+    setTimeout(retrain, 60 * 1000);
+    setInterval(retrain, marketModelIntervalSeconds() * 1000);
+    logger.info(`Market model retrain scheduled every ${marketModelIntervalSeconds()}s`);
+  } catch (error) {
+    logger.error('Failed to initialize market model; continuing without retrains', error);
+  }
+}
 
 logger.info(`Started Fredy successfully. Ui can be accessed via http://localhost:${settings.port}`);
 

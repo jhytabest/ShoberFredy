@@ -127,12 +127,17 @@ Single-container architecture — index.js also starts, in-process:
 - Prometheus market exporter on :9217 (`lib/services/market/metricsExporter.js`, `FREDY_MARKET_EXPORTER_PORT`, 0 disables)
 - daily market model retrain (`lib/services/market/marketModel.js`, `FREDY_MARKET_MODEL_INTERVAL_SECONDS`, 0 disables)
 
-Geocoding is Google-only (`GOOGLE_GEOCODING_API_KEY`; without a key listings
-are kept without coordinates). Cache table: homeserver_geocode_cache. The
-model trains on non-blacklisted rows of notifying jobs and prefers stored
-listing_attributes over re-parsing text.
+Geocoding is Google-only (`GOOGLE_GEOCODING_API_KEY`) and STRICT: when the
+geocoder is unavailable (no key, quota, transport) the pipeline run aborts
+before save — nothing is stored, listings return on the next run, and the
+exporter flags `fredy_geocoding_healthy 0`. There is no geocoding cron; the
+backfill CLI is manual-only. Cache table: homeserver_geocode_cache. The model
+trains on non-blacklisted rows of notifying jobs and prefers stored
+listing_attributes over re-parsing text. Blacklist matches title + search
+snippet by default; the enriched detail description only with the
+`blacklist_filter_on_provider_details` user setting.
 
-CLIs: `tools/market/geocoderBackfill.js` (run|daemon|status|refresh-all), `tools/market/marketModel.js` (run|daemon|status), `tools/migrate/importLegacyDb.js --source <db>` (legacy fredy DB import). Deployment: `doc/DEPLOYMENT.md`.
+CLIs: `tools/market/geocoderBackfill.js` (run|status|refresh-all; manual only), `tools/market/marketModel.js` (run|daemon|status), `tools/migrate/importLegacyDb.js --source <db>` (legacy fredy DB import). Deployment: `doc/DEPLOYMENT.md`.
 
 ## Coding
 - After building the task, run the linter

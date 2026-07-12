@@ -128,7 +128,23 @@ async function main() {
   source.close();
   console.log('snapshot written to:', targetPath);
 
-  // 3. Run Shoberfredy migrations against the imported copy. When the target
+  // 3. Verify the snapshot BEFORE migrations: later migrations may trim
+  // legacy data on purpose (e.g. migration 25 deletes legacy shadow rows),
+  // so post-migration counts are not a copy-fidelity check.
+  const target = new Database(targetPath, { readonly: true, fileMustExist: true });
+  const targetCounts = countTables(target);
+  target.close();
+  console.log('imported counts:', JSON.stringify(targetCounts));
+
+  const lost = Object.entries(sourceCounts).filter(
+    ([table, n]) => n != null && (targetCounts[table] == null || targetCounts[table] < n),
+  );
+  if (lost.length > 0) {
+    throw new Error(`Row loss detected for: ${lost.map(([table]) => table).join(', ')}`);
+  }
+  console.log('snapshot verified — no rows lost.');
+
+  // 4. Run Shoberfredy migrations against the imported copy. When the target
   // is not the configured location, point the migration runner's connection
   // at it explicitly is not possible (singleton reads conf/config.json), so
   // we only auto-migrate the configured location.
@@ -150,19 +166,7 @@ async function main() {
     );
   }
 
-  // 4. Verify.
-  const target = new Database(targetPath, { readonly: true, fileMustExist: true });
-  const targetCounts = countTables(target);
-  target.close();
-  console.log('imported counts:', JSON.stringify(targetCounts));
-
-  const lost = Object.entries(sourceCounts).filter(
-    ([table, n]) => n != null && (targetCounts[table] == null || targetCounts[table] < n),
-  );
-  if (lost.length > 0) {
-    throw new Error(`Row loss detected for: ${lost.map(([table]) => table).join(', ')}`);
-  }
-  console.log('import OK — no rows lost.');
+  console.log('import OK.');
 }
 
 await main();

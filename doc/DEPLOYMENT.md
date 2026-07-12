@@ -2,9 +2,9 @@
 
 The pipeline is split in two:
 
-1. **This repo (CI/CD)** — every push to `master` runs lint + offline tests
-   (`ci.yml`) and builds/publishes `ghcr.io/jhytabest/shoberfredy:master`
-   (`docker.yml`, amd64). Tags publish versioned images.
+1. **This repo (CI/CD)** — pull requests run `ci.yml`; every push to `master`
+   runs lint + offline tests before `docker.yml` builds and publishes
+   `ghcr.io/jhytabest/shoberfredy:master` (amd64). Tags publish versioned images.
 2. **The homeserver repo** — owns the actual deployment (Ansible → compose on
    the host reached via `ssh hs`).
 
@@ -25,26 +25,17 @@ docker exec shoberfredy node tools/market/marketModel.js run|status
 docker exec shoberfredy node tools/market/geocoderBackfill.js run|status|refresh-all
 ```
 
-## Switching the homeserver over (not yet done)
+## Homeserver integration
 
-In `homeserver/services/fredy/`:
+The homeserver repository uses the prebuilt image directly. Its Fredy Compose
+project contains only the `fredy` service, retains the existing hardening and
+volumes, and sets `pull_policy: always`. Prometheus scrapes the in-process
+exporter at `fredy:9217`; the Google key still comes from the homeserver's
+secret-managed environment.
 
-- Delete the patching machinery (`Dockerfile`, `patch-fredy-pipeline.mjs`, all
-  copied `.mjs` modules) — the image is prebuilt.
-- Collapse `compose.yml.j2` to the single `fredy` service with
-  `image: ghcr.io/jhytabest/shoberfredy:master`, keeping the existing
-  hardening (user 10001, `read_only`, `cap_drop`, tmpfs) and volumes
-  (`/conf`, `/srv/data/fredy:/db`, cloakbrowser/cache mounts). Drop the
-  `fredy-market-exporter` and `fredy-market-model` services; add
-  `FREDY_MARKET_EXPORTER_PORT=9217` + `FREDY_MARKET_MODEL_INTERVAL_SECONDS=86400`
-  to the environment and expose 9217 on `home_stack_net`.
-- **Prometheus**: change the scrape target from `fredy-market-exporter:9217`
-  to `fredy:9217` in the monitoring config.
-- `geocoder.env` stays as-is; the in-process geocoder and the backfill CLI
-  read the same variables.
-- GHCR auth: the package is private. Either make the package visibility
-  public, or `docker login ghcr.io` on the host with a read-only PAT
-  (packages:read) before the first pull.
+The old image-patching Dockerfile, copied modules, standalone exporter, model,
+and geocoding containers have been removed. The host is authenticated to the
+private package with a classic PAT limited to `read:packages`.
 
 Trade-off note: the split-container isolation (read-only DB for the exporter,
 `network_mode: none` for the model) is gone by design; the exporter still
@@ -52,12 +43,14 @@ opens its database handle read-only in-process.
 
 ## Cutover checklist
 
-- **Disable/delete the legacy "zz Shadow" jobs** in the UI: the save-all
-  policy makes them redundant (main jobs now store blacklisted/filtered
-  listings hidden). Their historic rows are tagged
-  `hidden_reason = 'legacy_shadow'` by migration 24 and stay out of the model.
-- Migration 24 also backfills `listing_attributes` for all existing rows
-  (runs once at first start, a few seconds for ~10k listings).
+- Migration 24 backfills `listing_attributes` for all existing rows and tags
+  legacy shadow rows; **migration 25 then deletes the legacy shadow corpus,
+  the adapterless "zz Shadow" jobs, and the homeserver_backfill_hides table**
+  — the database ends up trimmed to active data only. Both run automatically
+  at first start.
+- Alert on `fredy_geocoding_healthy == 0`: pipeline runs abort (nothing is
+  ingested) while the geocoder is unavailable. Backfill afterwards is manual:
+  `docker exec fredy node tools/market/geocoderBackfill.js run`.
 
 ## Migrating the existing database
 
@@ -76,9 +69,14 @@ node tools/migrate/importLegacyDb.js --source /path/to/listings.db [--target pat
 
 ## Automatic updates
 
-Recommended: add a `repository_dispatch` step at the end of this repo's
-`docker.yml` that triggers the homeserver repo's deploy workflow (needs a PAT
-secret with `repo` scope on the homeserver repo), and set
-`pull_policy: always` on the fredy service in the homeserver compose. Every
-Shoberfredy push then flows: CI → GHCR image → homeserver deploy pipeline →
-new container.
+After the image passes its container smoke test, `docker.yml` sends the
+`shoberfredy_image_published` repository dispatch using the fine-grained
+`HOMESERVER_DISPATCH_TOKEN` secret. The homeserver workflow validates its
+repository, joins Tailscale, and invokes the restricted `deploy-fredy` SSH
+command. That command runs `infra/ansible/fredy-update.yml`, which pulls and
+reconciles only the `fredy` Compose service; every other container remains
+untouched.
+
+The homeserver cutover must be deployed once through its normal full workflow
+before the first automatic Fredy dispatch, because that bootstrap installs the
+new restricted SSH command and single-container Compose definition.

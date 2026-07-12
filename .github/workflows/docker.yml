@@ -17,7 +17,30 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  quality:
+    name: Lint, format, offline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'yarn'
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Check formatting
+        run: yarn format:check
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Offline tests
+        run: yarn test:offline
+
   build-and-push-image:
+    needs: quality
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -91,3 +114,14 @@ jobs:
           done
           echo "Container healthy."
           docker compose down
+
+      - name: Trigger Fredy-only homeserver deployment
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.HOMESERVER_DISPATCH_TOKEN }}
+        run: |
+          jq -n \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg image "ghcr.io/${GITHUB_REPOSITORY}:master" \
+            '{event_type:"shoberfredy_image_published",client_payload:{source_sha:$source_sha,image:$image}}' \
+            | gh api --method POST /repos/jhytabest/homeserver/dispatches --input -

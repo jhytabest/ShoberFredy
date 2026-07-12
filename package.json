@@ -24,8 +24,7 @@
     "market:exporter": "node tools/market/marketExporter.js",
     "geocode:backfill": "node tools/market/geocoderBackfill.js run",
     "migrate:import": "node tools/migrate/importLegacyDb.js",
-    "copyright": "node ./copyright.js",
-    "release": "node ./tools/release/release.js"
+    "copyright": "node ./copyright.js"
   },
   "type": "module",
   "lint-staged": {

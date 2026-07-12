@@ -149,11 +149,11 @@ describe('Save-all policy: filters decide visibility, not storage', () => {
     expect(mockStore.storedListings[0].hidden_reason).toBe('spec_filter');
   });
 
-  it('evaluates the blacklist on the enriched detail-page description', async () => {
+  it('evaluates the blacklist on the enriched detail-page description when opted in', async () => {
     const Fredy = await mockFredy();
     const providerId = 'test-provider-blacklist-details';
 
-    mockStore.setUserSettings({ provider_details: [providerId] });
+    mockStore.setUserSettings({ provider_details: [providerId], blacklist_filter_on_provider_details: true });
 
     const provider = baseProvider(
       [
@@ -226,6 +226,58 @@ describe('Save-all policy: filters decide visibility, not storage', () => {
     const notification = getLastNotification();
     const notifiedLinks = (notification?.payload ?? []).map((p) => p.link);
     expect(notifiedLinks).not.toContain('http://example.com/blacklisted');
+  });
+
+  it('aborts the run and stores nothing when the geocoder is unavailable', async () => {
+    const Fredy = await mockFredy();
+    const fredy = new Fredy(
+      baseProvider([
+        { id: 'g1', title: 'flat', address: 'geocoder-down', price: '100', link: 'http://example.com/g1' },
+      ]),
+      baseJob(),
+      'test-provider-geodown',
+      neverSimilar,
+      undefined,
+    );
+
+    await fredy.execute();
+
+    expect(mockStore.storedListings).toHaveLength(0);
+    expect(mockStore.deletedIds).toHaveLength(0);
+  });
+
+  it('honors blacklist_filter_on_provider_details=false: detail-page terms do not hide', async () => {
+    const Fredy = await mockFredy();
+    const providerId = 'test-provider-details-off';
+
+    // Details enabled for enrichment, but blacklist-on-details NOT enabled.
+    mockStore.setUserSettings({ provider_details: [providerId] });
+
+    const provider = baseProvider(
+      [
+        {
+          id: 'kept',
+          title: 'Nice flat',
+          address: 'Some street',
+          price: '600',
+          link: 'http://example.com/kept-details-off',
+          description: 'clean snippet',
+        },
+      ],
+      {
+        fetchDetails: (listing) => Promise.resolve({ ...listing, description: 'Mit allkauf wird der Traum wahr.' }),
+        crawlFields: { id: 'id', title: 'title', address: 'address', price: 'price', description: 'description' },
+        requiredFieldNames: ['id', 'title', 'address', 'price', 'description'],
+      },
+    );
+
+    const fredy = new Fredy(provider, baseJob({ blacklist: ['allkauf'] }), providerId, neverSimilar, undefined);
+
+    await fredy.execute();
+    mockStore.setUserSettings(null);
+
+    expect(mockStore.storedListings).toHaveLength(1);
+    expect(mockStore.storedListings[0].hidden_reason ?? null).toBe(null);
   });
 
   it('short-circuits notification when every listing is hidden, but still stores them', async () => {

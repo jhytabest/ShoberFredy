@@ -12,7 +12,6 @@ import { initTrackerCron } from './lib/services/crons/tracker-cron.js';
 import logger from './lib/services/logger.js';
 import { reloadEnabledFromSettings } from './lib/services/debug/debugLogStorage.js';
 import { initActiveCheckerCron } from './lib/services/crons/listing-alive-cron.js';
-import { initGeocodingCron } from './lib/services/crons/geocoding-cron.js';
 import { getSettings } from './lib/services/storage/settingsStorage.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
@@ -78,7 +77,9 @@ ensureDemoUserExists();
 await initTrackerCron();
 //do not wait for this to finish, let it run in the background
 initActiveCheckerCron();
-initGeocodingCron();
+// No geocoding cron: listings are geocoded at scrape time; a run aborts when
+// the geocoder is unavailable. Backfill is manual only
+// (tools/market/geocoderBackfill.js).
 
 // Market services (single-container mode): Prometheus exporter on its own
 // port and the periodic market model retrain, both in-process.

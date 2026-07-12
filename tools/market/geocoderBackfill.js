@@ -4,15 +4,16 @@
  */
 
 /*
- * Google geocode backfill CLI for listings that entered the database without
- * valid coordinates (e.g. during a Google outage window). Shares the
- * homeserver_geocode_cache table and the address key with the ingestion-time
- * geocoding service.
+ * Google geocode backfill CLI — MANUAL use only (run via docker exec after an
+ * incident); there is no automatic backfill and no daemon. Ingestion aborts a
+ * run when the geocoder is unavailable, so backfills are rarely needed.
+ * Shares the homeserver_geocode_cache table and the address key with the
+ * ingestion-time geocoding service.
  *
- * Usage: node tools/market/geocoderBackfill.js [run|daemon|status|refresh-all]
+ * Usage: node tools/market/geocoderBackfill.js [run|status|refresh-all]
  * Env: GOOGLE_GEOCODING_API_KEY (required except status), FREDY_MARKET_DB_PATH,
- *      FREDY_GEOCODER_INTERVAL_SECONDS, FREDY_GEOCODER_BATCH_SIZE,
- *      FREDY_GEOCODER_DELAY_MS, FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS
+ *      FREDY_GEOCODER_BATCH_SIZE, FREDY_GEOCODER_DELAY_MS,
+ *      FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS
  */
 
 import { addressKey } from '../../lib/services/geocoding/address.js';
@@ -22,7 +23,6 @@ import { resolveDbPath, openToolDb } from '../../lib/services/market/marketDb.js
 
 const config = {
   dbPath: process.env.FREDY_GEOCODER_DB_PATH || (await resolveDbPath()),
-  intervalSeconds: intEnv('FREDY_GEOCODER_INTERVAL_SECONDS', 6 * 60 * 60),
   batchSize: intEnv('FREDY_GEOCODER_BATCH_SIZE', 250),
   delayMs: intEnv('FREDY_GEOCODER_DELAY_MS', 150),
   retryFailedAfterDays: intEnv('FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS', 30),
@@ -36,9 +36,6 @@ const mode = process.argv[2] || 'run';
 
 if (mode === 'status') {
   printStatus();
-} else if (mode === 'daemon') {
-  mustGetEnv('GOOGLE_GEOCODING_API_KEY');
-  await runDaemon();
 } else if (mode === 'run') {
   mustGetEnv('GOOGLE_GEOCODING_API_KEY');
   await runOnce();
@@ -47,19 +44,6 @@ if (mode === 'status') {
   await runOnce({ includeExistingCoordinates: true, replaceExistingCoordinates: true });
 } else {
   throw new Error(`Unknown mode: ${mode}`);
-}
-
-async function runDaemon() {
-  while (true) {
-    let delayMs = config.intervalSeconds * 1000;
-    try {
-      await runOnce();
-    } catch (error) {
-      console.error(`geocoder run failed, retrying later: ${error.message}`);
-      delayMs = Math.min(delayMs, 15 * 60 * 1000);
-    }
-    await sleep(delayMs);
-  }
 }
 
 async function runOnce(options = {}) {

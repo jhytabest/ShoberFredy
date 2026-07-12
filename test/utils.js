@@ -17,7 +17,12 @@ export const sseEvents = [];
 vi.mock('../lib/services/storage/listingsStorage.js', () => mockStore);
 vi.mock('../lib/services/storage/settingsStorage.js', () => mockStore);
 vi.mock('../lib/services/geocoding/geoCodingService.js', () => ({
-  geocodeAddress: mockStore.getGeocoordinatesByAddress,
+  // Default: the geocoder answered but could not resolve the address
+  // (definitive not-found). The sentinel address 'geocoder-down' simulates an
+  // unavailable geocoder, which aborts the pipeline run.
+  geocodeAddress: async (address) => (address === 'geocoder-down' ? null : { lat: -1, lng: -1 }),
+  isGeocodingPaused: () => false,
+  getGeocodingHealth: () => ({ healthy: true, configured: true, lastUnavailableAt: 0 }),
 }));
 vi.mock('../lib/services/storage/jobStorage.js', () => ({
   getJob: (jobKey) => ({ id: jobKey, userId: 'user1' }),

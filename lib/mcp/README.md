@@ -1,4 +1,4 @@
- # Fredy MCP Server
+# Fredy MCP Server
 
 The Fredy MCP Server exposes your real estate jobs and listings data to LLM clients. It supports two transports:
 
@@ -13,21 +13,22 @@ All MCP access is **token-based** based. Every Fredy user is automatically assig
 
 MCP tokens are displayed in the **User Management** list (Admin → Users). Each user's token is shown in the **"MCP Token"** column.
 
-> **Important:** MCP tokens never expire. They are permanent secrets tied to each user account. If a token is compromised, you must change the token! If you chose to use a token from an admin account, the LLM can query information from ALL jobs/listings. 
+> **Important:** MCP tokens never expire. They are permanent secrets tied to each user account. If a token is compromised, you must change the token! If you chose to use a token from an admin account, the LLM can query information from ALL jobs/listings.
 
 ## Available Tools
 
-| Tool | Description                                                                    |
-|------|--------------------------------------------------------------------------------|
-| `list_jobs` | List real estate search jobs with pagination and text filtering                |
-| `get_job` | Get detailed information about a specific job                                  |
-| `list_listings` | Search and list real estate listings with pagination, text search, and filters |
-| `get_listing` | Get full details of a single listing                                           |
+| Tool                    | Description                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `list_jobs`             | List real estate search jobs with pagination and text filtering                |
+| `get_job`               | Get detailed information about a specific job                                  |
+| `list_listings`         | Search and list real estate listings with pagination, text search, and filters |
+| `get_listing`           | Get full details of a single listing                                           |
 | `get_current_date_time` | Gets the current date/time for the llm to be used                              |
 
 ### Tool Details
 
 #### list_jobs
+
 - `page` (number, optional) – Page number (default: 1)
 - `pageSize` (number, optional) – Results per page (default: 50, max: 1000). Use pagination to fetch more.
 - `filter` (string, optional) – Free-text filter on job name
@@ -35,9 +36,11 @@ MCP tokens are displayed in the **User Management** list (Admin → Users). Each
 Response: markdown table with columns ID, Name, Enabled, Active Listings. Includes summary and pagination info.
 
 #### get_job
+
 - `jobId` (string, required) – The job ID to retrieve
 
 #### list_listings
+
 - `page` (number, optional) – Page number (default: 1)
 - `pageSize` (number, optional) – Results per page (default: 50, max: 1000). Use pagination to fetch more.
 - `filter` (string, optional) – Free-text search across title, address, provider, link
@@ -56,6 +59,7 @@ Response: markdown table with columns ID, Title, Address, Price, Size, Provider,
 > **Note:** All timestamps are **unix timestamps in milliseconds** (e.g. `1772008362564`), not seconds.
 
 #### get_listing
+
 - `listingId` (string, required) – The listing ID to retrieve
 
 ## Usage with Local LLM (stdio transport)
@@ -79,6 +83,7 @@ npx @modelcontextprotocol/inspector -e MCP_TOKEN=fredy_<your-token> -- node mcp/
 ```
 
 Once the inspector is running, open the URL shown in your terminal (usually `http://localhost:6274`). You can then:
+
 1. Click **Connect** to establish the stdio connection
 2. Go to the **Tools** tab to see all available tools
 3. Select a tool, fill in parameters, and click **Run** to test it
@@ -90,7 +95,7 @@ Once the inspector is running, open the URL shown in your terminal (usually `htt
 #### Setup
 
 1. Open **LM Studio** and load a model that supports tool use (e.g., Qwen 2.5, Llama 3.1, Mistral, etc.)
-2. In the right side  under **Integrations** click on "# install" and "edit mcp.json"
+2. In the right side under **Integrations** click on "# install" and "edit mcp.json"
 3. Edit the LM Studio MCP config file directly (`~/.lmstudio/config/mcp.json` or via the UI export):
 
    ```json
@@ -111,16 +116,17 @@ Once the inspector is running, open the URL shown in your terminal (usually `htt
 5. You should see the Fredy tools appear as available tools
 
 #### Suggestion on LLM
+
 After testing numerous LLM's, I got the best results with Qwen 3.5 or Qwen 2.5.. E.g. `Qwen2.5-14B-Instruct-1M-8bit`.
 
 #### Usage
 
 Once connected, simply ask your LLM about your real estate data in natural language:
 
-- *"Show me all my active search jobs"*
-- *"List the latest listings from my Berlin apartment search"*
-- *"Get details for listing XYZ"*
-- *"What are the cheapest listings across all my jobs?"*
+- _"Show me all my active search jobs"_
+- _"List the latest listings from my Berlin apartment search"_
+- _"Get details for listing XYZ"_
+- _"What are the cheapest listings across all my jobs?"_
 
 The LLM will automatically call the appropriate Fredy MCP tools and present the results.
 
@@ -153,6 +159,7 @@ The LLM will automatically call the appropriate Fredy MCP tools and present the 
    Replace `/absolute/path/to/fredy` with the actual path on your machine (e.g. `/Users/you/dev/fredy`).
 
    > **Important:** Claude Desktop launches with a restricted `PATH` and often cannot find `node` by name. Always use the **full absolute path** to the node binary. Find yours by running `which node` in a terminal. Common locations:
+   >
    > - Homebrew (default): `/opt/homebrew/bin/node`
    > - Homebrew (versioned, e.g. node@22): `/opt/homebrew/opt/node@22/bin/node`
    > - nvm: `/Users/<you>/.nvm/versions/node/<version>/bin/node`
@@ -164,9 +171,9 @@ The LLM will automatically call the appropriate Fredy MCP tools and present the 
 
 Once connected, simply ask Claude about your real estate data:
 
-- *"Show me all my active search jobs"*
-- *"List the latest listings from my Berlin apartment search"*
-- *"What are the cheapest apartments added this week?"*
+- _"Show me all my active search jobs"_
+- _"List the latest listings from my Berlin apartment search"_
+- _"What are the cheapest apartments added this week?"_
 
 Claude will automatically call the appropriate Fredy MCP tools.
 

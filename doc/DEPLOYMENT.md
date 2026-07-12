@@ -50,6 +50,15 @@ Trade-off note: the split-container isolation (read-only DB for the exporter,
 `network_mode: none` for the model) is gone by design; the exporter still
 opens its database handle read-only in-process.
 
+## Cutover checklist
+
+- **Disable/delete the legacy "zz Shadow" jobs** in the UI: the save-all
+  policy makes them redundant (main jobs now store blacklisted/filtered
+  listings hidden). Their historic rows are tagged
+  `hidden_reason = 'legacy_shadow'` by migration 24 and stay out of the model.
+- Migration 24 also backfills `listing_attributes` for all existing rows
+  (runs once at first start, a few seconds for ~10k listings).
+
 ## Migrating the existing database
 
 The old and new schema are compatible (same upstream lineage; the

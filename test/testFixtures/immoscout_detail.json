@@ -482,137 +482,77 @@
       "items": [
         {
           "id": "165994703",
-          "attributes": [
-            "1.790 €",
-            "78,1 m²",
-            "3 Zi."
-          ],
+          "attributes": ["1.790 €", "78,1 m²", "3 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/8183b9a1-a928-491c-b6ea-6f3a5ff8162f-1997026335.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "166561801",
-          "attributes": [
-            "1.320 €",
-            "58,6 m²",
-            "2 Zi."
-          ],
+          "attributes": ["1.320 €", "58,6 m²", "2 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/44e0e5f9-d5d8-48e5-9e42-3274cbc05556-2007039892.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165975759",
-          "attributes": [
-            "2.150 €",
-            "98 m²",
-            "4 Zi."
-          ],
+          "attributes": ["2.150 €", "98 m²", "4 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/756e9426-c1f8-4756-98b1-2bdc6028f07a-1996650985.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165975741",
-          "attributes": [
-            "2.360 €",
-            "112,5 m²",
-            "5 Zi."
-          ],
+          "attributes": ["2.360 €", "112,5 m²", "5 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/eb298253-08a4-48eb-baa6-4ad19ed72df3-1996650699.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165975624",
-          "attributes": [
-            "1.520 €",
-            "70,9 m²",
-            "2 Zi."
-          ],
+          "attributes": ["1.520 €", "70,9 m²", "2 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/6fafe087-d314-4727-bc7a-0bf7aed4c73a-1996648745.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165975598",
-          "attributes": [
-            "1.320 €",
-            "58 m²",
-            "2 Zi."
-          ],
+          "attributes": ["1.320 €", "58 m²", "2 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/29e6e279-21ed-4630-8229-2d455d60c5ac-1996648285.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165975460",
-          "attributes": [
-            "1.210 €",
-            "50,8 m²",
-            "2 Zi."
-          ],
+          "attributes": ["1.210 €", "50,8 m²", "2 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/b93d4825-7e8a-4e0f-824e-cd1a7e6bf35e-1996645907.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165199718",
-          "attributes": [
-            "2.190 €",
-            "102,4 m²",
-            "4 Zi."
-          ],
+          "attributes": ["2.190 €", "102,4 m²", "4 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/dac3d681-8027-4d3a-8c4b-3d89be4ed223-1985561565.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "167016936",
-          "attributes": [
-            "2.360 €",
-            "112,5 m²",
-            "5 Zi."
-          ],
+          "attributes": ["2.360 €", "112,5 m²", "5 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/bdfc5d22-dd7c-4fa3-ad6e-1339ad1083f9-2014969185.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165199377",
-          "attributes": [
-            "2.230 €",
-            "104,5 m²",
-            "4 Zi."
-          ],
+          "attributes": ["2.230 €", "104,5 m²", "4 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/2c6d2272-d28e-477d-8ee2-63a05263244a-1985562301.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "165146621",
-          "attributes": [
-            "1.870 €",
-            "89 m²",
-            "3 Zi."
-          ],
+          "attributes": ["1.870 €", "89 m²", "3 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/6059fc5f-2f9d-43b9-9e6c-9f82c715e8c7-1985563642.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "164094597",
-          "attributes": [
-            "1.660 €",
-            "78,9 m²",
-            "2 Zi."
-          ],
+          "attributes": ["1.660 €", "78,9 m²", "2 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/a3a0c67d-be45-423e-9a5b-8489e0123303-1967561926.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "167016134",
-          "attributes": [
-            "2.990 €",
-            "150,3 m²",
-            "5 Zi."
-          ],
+          "attributes": ["2.990 €", "150,3 m²", "5 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/b3e15ecd-0449-4d44-a69e-39c5081b4b82-2014962686.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "166562014",
-          "attributes": [
-            "2.070 €",
-            "96 m²",
-            "4 Zi."
-          ],
+          "attributes": ["2.070 €", "96 m²", "4 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/e8ed2029-8e81-443c-bb0e-6f5d270a968a-2007042953.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         },
         {
           "id": "166561906",
-          "attributes": [
-            "1.850 €",
-            "88,1 m²",
-            "3 Zi."
-          ],
+          "attributes": ["1.850 €", "88,1 m²", "3 Zi."],
           "imageUrl": "https://pictures.immobilienscout24.de/listings/96e26d69-77bc-43e3-ae7e-d567dda483c2-2007041696.jpg/ORIG/legacy_thumbnail/%WIDTH%x%HEIGHT%/format/jpg/quality/50"
         }
       ],

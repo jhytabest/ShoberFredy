@@ -15,23 +15,17 @@ vi.mock('../../lib/services/storage/SqliteConnection.js', () => ({
     getConnection: () => memoryDb,
     tableExists: (name) =>
       Boolean(memoryDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name)),
-    query: (sql, params = {}) => memoryDb.prepare(sql).all(params),
-    execute: (sql, params = {}) => memoryDb.prepare(sql).run(params),
   },
 }));
 
-const deleteListingsById = vi.fn();
-vi.mock('../../lib/services/storage/listingsStorage.js', () => ({
-  deleteListingsById: (ids) => deleteListingsById(ids),
-}));
-
-const { crossPortalDedupe } = await import('../../lib/services/listings/crossPortalDedupe.js');
+const { dropDuplicates } = await import('../../lib/services/listings/dedupe.js');
 const { ensureCacheTable, saveCache } = await import('../../lib/services/geocoding/geocodeCache.js');
 const { addressKey } = await import('../../lib/services/geocoding/address.js');
 
+const neverSimilar = { checkAndAddEntry: () => false };
+
 function seedSchema(db) {
   db.exec(`
-    CREATE TABLE jobs (id TEXT PRIMARY KEY, notification_adapter TEXT);
     CREATE TABLE listings (
       id TEXT PRIMARY KEY, job_id TEXT, provider TEXT, link TEXT, title TEXT,
       price REAL, size REAL, address TEXT, latitude REAL, longitude REAL,
@@ -41,18 +35,11 @@ function seedSchema(db) {
   ensureCacheTable(db);
 }
 
-function insertJob(db, id, notifying) {
-  db.prepare(`INSERT INTO jobs (id, notification_adapter) VALUES (?, ?)`).run(
-    id,
-    JSON.stringify(notifying ? [{ id: 'ntfy' }] : []),
-  );
-}
-
 function insertListing(db, listing) {
   db.prepare(
     `INSERT INTO listings (id, job_id, provider, link, title, price, size, address, latitude, longitude, created_at, manually_deleted)
      VALUES (@id, @job_id, @provider, @link, @title, @price, @size, @address, @latitude, @longitude, @created_at, @manually_deleted)`,
-  ).run({ manually_deleted: 0, latitude: null, longitude: null, ...listing });
+  ).run({ manually_deleted: 0, latitude: null, longitude: null, address: null, ...listing });
 }
 
 function cacheGeocode(db, address, accuracy) {
@@ -69,23 +56,22 @@ function cacheGeocode(db, address, accuracy) {
   });
 }
 
-const NOTIFYING = [{ id: 'ntfy' }];
-
-describe('crossPortalDedupe', () => {
+describe('dropDuplicates', () => {
   beforeEach(() => {
     memoryDb = new Database(':memory:');
     seedSchema(memoryDb);
-    deleteListingsById.mockClear();
   });
 
-  it('keeps everything for shadow jobs (no adapters)', () => {
-    const listings = [{ id: 'a', title: 'x' }];
-    expect(crossPortalDedupe(listings, { providerId: 'p', notificationAdapters: [] })).toEqual(listings);
-    expect(deleteListingsById).not.toHaveBeenCalled();
+  it('drops listings the similarity cache knows', () => {
+    const alwaysSimilar = { checkAndAddEntry: () => true };
+    const kept = dropDuplicates([{ id: 'a', title: 'x', price: 100, address: 'addr' }], {
+      similarityCache: alwaysSimilar,
+      providerId: 'p',
+    });
+    expect(kept).toHaveLength(0);
   });
 
-  it('suppresses a same-link duplicate with matching size and close price', () => {
-    insertJob(memoryDb, 'job1', true);
+  it('drops a same-link duplicate with matching size and close price', () => {
     insertListing(memoryDb, {
       id: 'old',
       job_id: 'job1',
@@ -95,8 +81,6 @@ describe('crossPortalDedupe', () => {
       price: 1000,
       size: 60,
       address: 'Torstraße 12, 10119 Berlin',
-      latitude: 52.5,
-      longitude: 13.4,
       created_at: Date.now() - 1000,
     });
 
@@ -107,16 +91,12 @@ describe('crossPortalDedupe', () => {
       price: 1010, // within ±2%
       size: 60,
       address: 'Torstraße 12, 10119 Berlin',
-      latitude: 52.5,
-      longitude: 13.4,
     };
-    const kept = crossPortalDedupe([fresh], { providerId: 'immowelt', notificationAdapters: NOTIFYING });
-    expect(kept).toEqual([]);
-    expect(deleteListingsById).toHaveBeenCalledWith(['new']);
+    const kept = dropDuplicates([fresh], { similarityCache: neverSimilar, providerId: 'immowelt' });
+    expect(kept).toHaveLength(0);
   });
 
-  it('suppresses a cross-portal duplicate on trusted coordinates', () => {
-    insertJob(memoryDb, 'job1', true);
+  it('drops a cross-portal duplicate on trusted coordinates', () => {
     const address = 'Torstraße 12, 10119 Berlin';
     cacheGeocode(memoryDb, address, 'house');
     insertListing(memoryDb, {
@@ -143,12 +123,11 @@ describe('crossPortalDedupe', () => {
       latitude: 52.500004,
       longitude: 13.400004,
     };
-    const kept = crossPortalDedupe([fresh], { providerId: 'immowelt', notificationAdapters: NOTIFYING });
-    expect(kept).toEqual([]);
+    const kept = dropDuplicates([fresh], { similarityCache: neverSimilar, providerId: 'immowelt' });
+    expect(kept).toHaveLength(0);
   });
 
-  it('keeps listings when the geocode is not trusted', () => {
-    insertJob(memoryDb, 'job1', true);
+  it('keeps listings when the stored geocode is not trusted', () => {
     const address = '10119 Berlin';
     cacheGeocode(memoryDb, address, 'postcode');
     insertListing(memoryDb, {
@@ -175,25 +154,22 @@ describe('crossPortalDedupe', () => {
       latitude: 52.5,
       longitude: 13.4,
     };
-    const kept = crossPortalDedupe([fresh], { providerId: 'immowelt', notificationAdapters: NOTIFYING });
+    const kept = dropDuplicates([fresh], { similarityCache: neverSimilar, providerId: 'immowelt' });
     expect(kept).toHaveLength(1);
-    expect(deleteListingsById).not.toHaveBeenCalled();
   });
 
-  it('never matches against shadow-job rows', () => {
-    insertJob(memoryDb, 'shadow', false);
+  it('never matches against hidden rows', () => {
     insertListing(memoryDb, {
       id: 'old',
-      job_id: 'shadow',
+      job_id: 'job1',
       provider: 'immoscout',
       link: 'https://example.com/flat-1',
       title: 'Flat',
       price: 1000,
       size: 60,
       address: 'Torstraße 12, 10119 Berlin',
-      latitude: 52.5,
-      longitude: 13.4,
       created_at: Date.now() - 1000,
+      manually_deleted: 1,
     });
 
     const fresh = {
@@ -204,12 +180,11 @@ describe('crossPortalDedupe', () => {
       size: 60,
       address: 'Torstraße 12, 10119 Berlin',
     };
-    const kept = crossPortalDedupe([fresh], { providerId: 'immowelt', notificationAdapters: NOTIFYING });
+    const kept = dropDuplicates([fresh], { similarityCache: neverSimilar, providerId: 'immowelt' });
     expect(kept).toHaveLength(1);
   });
 
-  it('requires matching size and close price even for same link', () => {
-    insertJob(memoryDb, 'job1', true);
+  it('keeps repriced listings (same link, price beyond tolerance)', () => {
     insertListing(memoryDb, {
       id: 'old',
       job_id: 'job1',
@@ -226,11 +201,11 @@ describe('crossPortalDedupe', () => {
       id: 'new',
       title: 'Flat repriced',
       link: 'https://example.com/flat-1',
-      price: 900, // -10% → repricing event, must be re-notified
+      price: 900, // -10% → repricing event, must be stored and notified
       size: 60,
       address: 'Torstraße 12, 10119 Berlin',
     };
-    const kept = crossPortalDedupe([repriced], { providerId: 'immoscout', notificationAdapters: NOTIFYING });
+    const kept = dropDuplicates([repriced], { similarityCache: neverSimilar, providerId: 'immoscout' });
     expect(kept).toHaveLength(1);
   });
 });

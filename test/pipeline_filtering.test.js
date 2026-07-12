@@ -3,388 +3,246 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-import { afterEach, expect } from 'vitest';
-import { mockFredy, sseEvents } from './utils.js';
+import { beforeEach, expect } from 'vitest';
+import { mockFredy } from './utils.js';
 import * as mockStore from './mocks/mockStore.js';
 import { get as getLastNotification } from './mocks/mockNotification.js';
 
-describe('Issue reproduction: listings filtered by similarity or area should be marked as manually deleted', () => {
-  it('should call deleteListingsById when listings are filtered by similarity', async () => {
-    const Fredy = await mockFredy();
+/*
+ * Storage policy: every non-duplicate listing is stored; the job's filters
+ * (blacklist, specs, spatial) only decide visibility via hidden_reason.
+ * Duplicates are never stored.
+ */
 
-    const mockSimilarityCache = {
-      checkAndAddEntry: () => true, // always similar
-    };
+const neverSimilar = { checkAndAddEntry: () => false };
 
-    const providerConfig = {
-      url: 'http://example.com',
-      getListings: () =>
-        Promise.resolve([{ id: '1', title: 'test', address: 'addr', price: '100', link: 'http://example.com/1' }]),
-      normalize: (l) => l,
-      filter: () => true,
-      crawlFields: { id: 'id', title: 'title', address: 'address', price: 'price' },
-      requiredFieldNames: ['id', 'title', 'address', 'price'],
-    };
+function baseProvider(listings, overrides = {}) {
+  return {
+    url: 'http://example.com',
+    getListings: () => Promise.resolve(listings),
+    normalize: (l) => l,
+    filter: () => true,
+    crawlFields: { id: 'id', title: 'title', address: 'address', price: 'price' },
+    requiredFieldNames: ['id', 'title', 'address', 'price'],
+    ...overrides,
+  };
+}
 
-    const mockedJob = {
-      id: 'test-job',
-      notificationAdapter: null,
-      specFilter: null,
-      spatialFilter: null,
-    };
+function baseJob(overrides = {}) {
+  return {
+    id: 'test-job',
+    notificationAdapter: [{ id: 'console' }],
+    specFilter: null,
+    spatialFilter: null,
+    blacklist: [],
+    ...overrides,
+  };
+}
 
-    const fredy = new Fredy(providerConfig, mockedJob, 'test-provider', mockSimilarityCache, undefined);
+const insidePolygon = {
+  features: [
+    {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [0, 1],
+            [1, 1],
+            [1, 0],
+            [0, 0],
+          ],
+        ],
+      },
+    },
+  ],
+};
 
-    // Clear deletedIds before test
-    mockStore.deletedIds.length = 0;
-
-    try {
-      await fredy.execute();
-    } catch {
-      // Might throw NoNewListingsWarning if all are filtered out
-    }
-
-    expect(mockStore.deletedIds).toContain('1');
-  });
-
-  it('should call deleteListingsById when listings are filtered by area', async () => {
-    const Fredy = await mockFredy();
-
-    const mockSimilarityCache = {
-      checkAndAddEntry: () => false, // never similar
-    };
-
-    const spatialFilter = {
-      features: [
-        {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [
-              [
-                [0, 0],
-                [0, 1],
-                [1, 1],
-                [1, 0],
-                [0, 0],
-              ],
-            ],
-          },
-        },
-      ],
-    };
-
-    const mockedJob = {
-      id: 'test-job',
-      notificationAdapter: null,
-      specFilter: null,
-      spatialFilter: spatialFilter,
-    };
-
-    const providerConfig = {
-      url: 'http://example.com',
-      getListings: () =>
-        Promise.resolve([
-          {
-            id: '2',
-            title: 'test',
-            address: 'addr',
-            price: '100',
-            latitude: 2,
-            longitude: 2,
-            link: 'http://example.com/2',
-          },
-        ]), // outside polygon
-      normalize: (l) => l,
-      filter: () => true,
-      crawlFields: { id: 'id', title: 'title', address: 'address', price: 'price' },
-      requiredFieldNames: ['id', 'title', 'address', 'price'],
-    };
-
-    const fredy = new Fredy(providerConfig, mockedJob, 'test-provider', mockSimilarityCache, undefined);
-
-    mockStore.deletedIds.length = 0;
-
-    try {
-      await fredy.execute();
-    } catch {
-      // Might throw NoNewListingsWarning if all are filtered out
-    }
-
-    expect(mockStore.deletedIds).toContain('2');
-  });
+beforeEach(() => {
+  mockStore.deletedIds.length = 0;
+  mockStore.storedListings.length = 0;
 });
 
-describe('Blacklist is re-applied after detail enrichment', () => {
-  afterEach(() => {
-    mockStore.setUserSettings(null);
-  });
-
-  it('filters out a listing whose blacklisted term only appears in the enriched description', async () => {
+describe('Save-all policy: filters decide visibility, not storage', () => {
+  it('does not store listings the similarity cache flags as duplicates', async () => {
     const Fredy = await mockFredy();
-    const providerId = 'test-provider';
-
-    mockStore.setUserSettings({
-      provider_details: [providerId],
-      blacklist_filter_on_provider_details: true,
-    });
-
-    const mockSimilarityCache = {
-      checkAndAddEntry: () => false,
-    };
-
-    const blacklist = ['allkauf'];
-
-    // The search results page returns a clean snippet (no blacklisted term).
-    // fetchDetails simulates loading the full detail page and discovers the
-    // blacklisted term hidden deep in the description.
-    const providerConfig = {
-      url: 'http://example.com',
-      getListings: () =>
-        Promise.resolve([
-          {
-            id: 'kept',
-            title: 'Nice house',
-            address: 'Some street',
-            price: '500000',
-            link: 'http://example.com/kept',
-            description: 'Cozy home with garden',
-          },
-          {
-            id: 'blacklisted',
-            title: 'Eleganz trifft Raumkomfort',
-            address: 'Other street',
-            price: '600000',
-            link: 'http://example.com/blacklisted',
-            description: 'Eleganz trifft Raumkomfort',
-          },
-        ]),
-      normalize: (l) => l,
-      filter: (l) => {
-        const text = `${l.title ?? ''} ${l.description ?? ''}`.toLowerCase();
-        return !blacklist.some((term) => text.includes(term));
-      },
-      fetchDetails: (listing) => {
-        if (listing.id === 'blacklisted') {
-          return Promise.resolve({
-            ...listing,
-            description: 'Mit allkauf Haus wird dein Traum vom Eigenheim wahr.',
-          });
-        }
-        return Promise.resolve(listing);
-      },
-      crawlFields: {
-        id: 'id',
-        title: 'title',
-        address: 'address',
-        price: 'price',
-        link: 'link',
-        description: 'description',
-      },
-      requiredFieldNames: ['id', 'title', 'address', 'price', 'link', 'description'],
-    };
-
-    const mockedJob = {
-      id: 'blacklist-test-job',
-      notificationAdapter: null,
-      specFilter: null,
-      spatialFilter: null,
-    };
-
-    const fredy = new Fredy(providerConfig, mockedJob, providerId, mockSimilarityCache, undefined);
-
-    const result = await fredy.execute();
-
-    expect(result).toBeInstanceOf(Array);
-    const ids = result.map((l) => l.id);
-    expect(ids).toContain('kept');
-    expect(ids).not.toContain('blacklisted');
-
-    const notification = getLastNotification();
-    const notifiedIds = (notification?.payload ?? []).map((p) => p.id);
-    expect(notifiedIds).not.toContain('blacklisted');
-  });
-
-  it('short-circuits the pipeline when all listings get blacklisted after enrichment', async () => {
-    const Fredy = await mockFredy();
-    const providerId = 'all-blacklisted-provider';
-
-    mockStore.setUserSettings({
-      provider_details: [providerId],
-      blacklist_filter_on_provider_details: true,
-    });
-
-    const mockSimilarityCache = {
-      checkAndAddEntry: () => false,
-    };
-
-    const blacklist = ['allkauf'];
-
-    const providerConfig = {
-      url: 'http://example.com',
-      getListings: () =>
-        Promise.resolve([
-          {
-            id: 'only',
-            title: 'Eleganz trifft Raumkomfort',
-            address: 'Some street',
-            price: '700000',
-            link: 'http://example.com/only',
-            description: 'Eleganz trifft Raumkomfort',
-          },
-        ]),
-      normalize: (l) => l,
-      filter: (l) => {
-        const text = `${l.title ?? ''} ${l.description ?? ''}`.toLowerCase();
-        return !blacklist.some((term) => text.includes(term));
-      },
-      fetchDetails: (listing) =>
-        Promise.resolve({
-          ...listing,
-          description: 'Mit allkauf Haus wird dein Traum vom Eigenheim wahr.',
-        }),
-      crawlFields: {
-        id: 'id',
-        title: 'title',
-        address: 'address',
-        price: 'price',
-        link: 'link',
-        description: 'description',
-      },
-      requiredFieldNames: ['id', 'title', 'address', 'price', 'link', 'description'],
-    };
-
-    const mockedJob = {
-      id: 'all-blacklisted-job',
-      notificationAdapter: null,
-      specFilter: null,
-      spatialFilter: null,
-    };
-
-    const fredy = new Fredy(providerConfig, mockedJob, providerId, mockSimilarityCache, undefined);
-
-    // Should resolve to undefined (NoNewListingsWarning is caught in _handleError).
-    const result = await fredy.execute();
-    expect(result).toBeUndefined();
-  });
-
-  it('does NOT re-filter when blacklist_filter_on_provider_details is disabled', async () => {
-    const Fredy = await mockFredy();
-    const providerId = 'opt-out-provider';
-
-    // provider_details enabled (so fetchDetails runs) but blacklist re-filter NOT enabled.
-    mockStore.setUserSettings({
-      provider_details: [providerId],
-      blacklist_filter_on_provider_details: false,
-    });
-
-    const mockSimilarityCache = {
-      checkAndAddEntry: () => false,
-    };
-
-    const blacklist = ['allkauf'];
-
-    const providerConfig = {
-      url: 'http://example.com',
-      getListings: () =>
-        Promise.resolve([
-          {
-            id: 'leaks-through',
-            title: 'Eleganz trifft Raumkomfort',
-            address: 'Other street',
-            price: '600000',
-            link: 'http://example.com/leaks-through',
-            description: 'Eleganz trifft Raumkomfort',
-          },
-        ]),
-      normalize: (l) => l,
-      filter: (l) => {
-        const text = `${l.title ?? ''} ${l.description ?? ''}`.toLowerCase();
-        return !blacklist.some((term) => text.includes(term));
-      },
-      fetchDetails: (listing) =>
-        Promise.resolve({
-          ...listing,
-          description: 'Mit allkauf Haus wird dein Traum vom Eigenheim wahr.',
-        }),
-      crawlFields: {
-        id: 'id',
-        title: 'title',
-        address: 'address',
-        price: 'price',
-        link: 'link',
-        description: 'description',
-      },
-      requiredFieldNames: ['id', 'title', 'address', 'price', 'link', 'description'],
-    };
-
-    const mockedJob = {
-      id: 'opt-out-job',
-      notificationAdapter: null,
-      specFilter: null,
-      spatialFilter: null,
-    };
-
-    const fredy = new Fredy(providerConfig, mockedJob, providerId, mockSimilarityCache, undefined);
-
-    const result = await fredy.execute();
-
-    // Listing leaks through because user has not opted in to the stricter check.
-    expect(result).toBeInstanceOf(Array);
-    expect(result.map((l) => l.id)).toContain('leaks-through');
-  });
-});
-
-describe('Live reload triggers via SSE', () => {
-  afterEach(() => {
-    sseEvents.length = 0;
-  });
-
-  it('emits a listings:new event via SSE when a new listing is saved', async () => {
-    sseEvents.length = 0;
-    const Fredy = await mockFredy();
-
-    const mockSimilarityCache = {
-      checkAndAddEntry: () => false, // unique listing
-    };
-
-    const providerConfig = {
-      url: 'http://example.com',
-      getListings: () =>
-        Promise.resolve([
-          {
-            id: 'brand-new-listing',
-            title: 'Cool Apartment',
-            address: 'Awesome Ave',
-            price: '500',
-            link: 'http://example.com/new',
-          },
-        ]),
-      normalize: (l) => l,
-      filter: () => true,
-      crawlFields: { id: 'id', title: 'title', address: 'address', price: 'price', link: 'link' },
-      requiredFieldNames: ['id', 'title', 'address', 'price', 'link'],
-    };
-
-    const mockedJob = {
-      id: 'live-reload-job',
-      notificationAdapter: null,
-      specFilter: null,
-      spatialFilter: null,
-    };
-
-    const fredy = new Fredy(providerConfig, mockedJob, 'live-reload-provider', mockSimilarityCache, undefined);
+    const alwaysSimilar = { checkAndAddEntry: () => true };
+    const fredy = new Fredy(
+      baseProvider([{ id: '1', title: 'test', address: 'addr', price: '100', link: 'http://example.com/1' }]),
+      baseJob(),
+      'test-provider-sim',
+      alwaysSimilar,
+      undefined,
+    );
 
     await fredy.execute();
 
-    expect(sseEvents).toHaveLength(1);
-    expect(sseEvents[0]).toEqual({
-      userId: 'user1',
-      event: 'listings:new',
-      data: {
-        jobId: 'live-reload-job',
-        count: 1,
+    expect(mockStore.storedListings).toHaveLength(0);
+    expect(mockStore.deletedIds).toHaveLength(0);
+  });
+
+  it('stores listings outside the spatial filter hidden with area_filter', async () => {
+    const Fredy = await mockFredy();
+    const fredy = new Fredy(
+      baseProvider([
+        {
+          id: '2',
+          title: 'outside',
+          address: 'addr',
+          price: '100',
+          latitude: 2,
+          longitude: 2, // outside polygon
+          link: 'http://example.com/2',
+        },
+      ]),
+      baseJob({ spatialFilter: insidePolygon }),
+      'test-provider-area',
+      neverSimilar,
+      undefined,
+    );
+
+    await fredy.execute();
+
+    expect(mockStore.storedListings).toHaveLength(1);
+    expect(mockStore.storedListings[0].hidden_reason).toBe('area_filter');
+    expect(mockStore.deletedIds).toHaveLength(0);
+  });
+
+  it('stores listings without valid coordinates hidden with no_coordinates', async () => {
+    const Fredy = await mockFredy();
+    const fredy = new Fredy(
+      baseProvider([
+        {
+          id: '3',
+          title: 'no coords',
+          address: null, // never geocoded → no geocode_unavailable marker
+          price: '100',
+          link: 'http://example.com/3',
+        },
+      ]),
+      baseJob({ spatialFilter: insidePolygon }),
+      'test-provider-nocoords',
+      neverSimilar,
+      undefined,
+    );
+
+    await fredy.execute();
+
+    expect(mockStore.storedListings).toHaveLength(1);
+    expect(mockStore.storedListings[0].hidden_reason).toBe('no_coordinates');
+  });
+
+  it('stores listings failing the spec filter hidden with spec_filter', async () => {
+    const Fredy = await mockFredy();
+    const fredy = new Fredy(
+      baseProvider([{ id: '4', title: 'too pricey', address: 'addr', price: 3000, link: 'http://example.com/4' }]),
+      baseJob({ specFilter: { maxPrice: 2500 } }),
+      'test-provider-spec',
+      neverSimilar,
+      undefined,
+    );
+
+    await fredy.execute();
+
+    expect(mockStore.storedListings).toHaveLength(1);
+    expect(mockStore.storedListings[0].hidden_reason).toBe('spec_filter');
+  });
+
+  it('evaluates the blacklist on the enriched detail-page description', async () => {
+    const Fredy = await mockFredy();
+    const providerId = 'test-provider-blacklist-details';
+
+    mockStore.setUserSettings({ provider_details: [providerId] });
+
+    const provider = baseProvider(
+      [
+        {
+          id: 'blacklisted',
+          title: 'Eleganz trifft Raumkomfort',
+          address: 'Other street',
+          price: '600',
+          link: 'http://example.com/blacklisted',
+          description: 'clean snippet',
+        },
+      ],
+      {
+        // The blacklisted term only shows up on the detail page.
+        fetchDetails: (listing) => Promise.resolve({ ...listing, description: 'Mit allkauf wird der Traum wahr.' }),
+        crawlFields: { id: 'id', title: 'title', address: 'address', price: 'price', description: 'description' },
+        requiredFieldNames: ['id', 'title', 'address', 'price', 'description'],
       },
-    });
+    );
+
+    const fredy = new Fredy(provider, baseJob({ blacklist: ['allkauf'] }), providerId, neverSimilar, undefined);
+
+    await fredy.execute();
+    mockStore.setUserSettings(null);
+
+    expect(mockStore.storedListings).toHaveLength(1);
+    expect(mockStore.storedListings[0].hidden_reason).toBe('blacklist');
+  });
+
+  it('stores blacklisted listings hidden and notifies only visible ones', async () => {
+    const Fredy = await mockFredy();
+    const provider = baseProvider([
+      {
+        id: 'kept',
+        title: 'Nice flat',
+        address: 'Some street',
+        price: '500',
+        link: 'http://example.com/kept',
+        description: 'Cozy home',
+      },
+      {
+        id: 'blacklisted',
+        title: 'WG Zimmer in Mitte',
+        address: 'Other street',
+        price: '600',
+        link: 'http://example.com/blacklisted',
+        description: 'clean snippet',
+      },
+    ]);
+
+    const fredy = new Fredy(
+      provider,
+      baseJob({ blacklist: ['wg'] }),
+      'test-provider-visibility',
+      neverSimilar,
+      undefined,
+    );
+
+    const result = await fredy.execute();
+
+    // Both listings are stored; the blacklisted one is hidden.
+    expect(mockStore.storedListings).toHaveLength(2);
+    const byLink = Object.fromEntries(mockStore.storedListings.map((l) => [l.link, l.hidden_reason ?? null]));
+    expect(byLink['http://example.com/kept']).toBe(null);
+    expect(byLink['http://example.com/blacklisted']).toBe('blacklist');
+
+    // Only the visible listing is notified.
+    expect(result).toBeInstanceOf(Array);
+    expect(result.map((l) => l.link)).toEqual(['http://example.com/kept']);
+    const notification = getLastNotification();
+    const notifiedLinks = (notification?.payload ?? []).map((p) => p.link);
+    expect(notifiedLinks).not.toContain('http://example.com/blacklisted');
+  });
+
+  it('short-circuits notification when every listing is hidden, but still stores them', async () => {
+    const Fredy = await mockFredy();
+    const fredy = new Fredy(
+      baseProvider([
+        { id: 'only', title: 'WG Zimmer frei', address: 'addr', price: '100', link: 'http://example.com/only' },
+      ]),
+      baseJob({ blacklist: ['wg'] }),
+      'test-provider-allhidden',
+      neverSimilar,
+      undefined,
+    );
+
+    await fredy.execute();
+
+    expect(mockStore.storedListings).toHaveLength(1);
+    expect(mockStore.storedListings[0].hidden_reason).toBe('blacklist');
   });
 });

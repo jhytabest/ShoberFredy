@@ -114,11 +114,23 @@ Tools: `list_jobs`, `get_job`, `list_listings`, `get_listing`, `get_current_date
 
 ## Shoberfredy additions (this fork)
 
+Storage policy: EVERY non-duplicate listing is stored; job filters (blacklist,
+specs, spatial) only set `listings.hidden_reason` ('blacklist' | 'spec_filter'
+| 'area_filter' | 'no_coordinates'; NULL = visible). Only visible listings are
+notified. Duplicates (similarity cache + cross-portal DB check in
+`lib/services/listings/dedupe.js`) are never stored. Structured attributes are
+parsed at scrape time into `listing_attributes` (migration 24), and the market
+score is computed pre-save and persisted with the listing (`storeListings`).
+notify.js renders the score line into notifications.
+
 Single-container architecture — index.js also starts, in-process:
 - Prometheus market exporter on :9217 (`lib/services/market/metricsExporter.js`, `FREDY_MARKET_EXPORTER_PORT`, 0 disables)
 - daily market model retrain (`lib/services/market/marketModel.js`, `FREDY_MARKET_MODEL_INTERVAL_SECONDS`, 0 disables)
 
-Pipeline extras (all fail open): Google geocoding + cache (`lib/services/geocoding/`, needs `GOOGLE_GEOCODING_API_KEY`, falls back to Nominatim), save-time market scoring + notification decoration (`lib/services/scoring/`), cross-portal dedupe (`lib/services/listings/crossPortalDedupe.js`). Market tables live in migration 22 (`homeserver_*`).
+Geocoding is Google-only (`GOOGLE_GEOCODING_API_KEY`; without a key listings
+are kept without coordinates). Cache table: homeserver_geocode_cache. The
+model trains on non-blacklisted rows of notifying jobs and prefers stored
+listing_attributes over re-parsing text.
 
 CLIs: `tools/market/geocoderBackfill.js` (run|daemon|status|refresh-all), `tools/market/marketModel.js` (run|daemon|status), `tools/migrate/importLegacyDb.js --source <db>` (legacy fredy DB import). Deployment: `doc/DEPLOYMENT.md`.
 

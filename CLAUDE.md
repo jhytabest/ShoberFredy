@@ -112,6 +112,16 @@ Tools: `list_jobs`, `get_job`, `list_listings`, `get_listing`, `get_current_date
 - **Test fixtures** in `test/testFixtures/` - HTML/JSON snapshots per provider; `TEST_MODE=offline` mocks `puppeteerExtractor` and global `fetch` via `test/offlineFixtures.js`
 - **`conf/config.json`** is the only runtime config file; created with defaults if missing
 
+## Shoberfredy additions (this fork)
+
+Single-container architecture — index.js also starts, in-process:
+- Prometheus market exporter on :9217 (`lib/services/market/metricsExporter.js`, `FREDY_MARKET_EXPORTER_PORT`, 0 disables)
+- daily market model retrain (`lib/services/market/marketModel.js`, `FREDY_MARKET_MODEL_INTERVAL_SECONDS`, 0 disables)
+
+Pipeline extras (all fail open): Google geocoding + cache (`lib/services/geocoding/`, needs `GOOGLE_GEOCODING_API_KEY`, falls back to Nominatim), save-time market scoring + notification decoration (`lib/services/scoring/`), cross-portal dedupe (`lib/services/listings/crossPortalDedupe.js`). Market tables live in migration 22 (`homeserver_*`).
+
+CLIs: `tools/market/geocoderBackfill.js` (run|daemon|status|refresh-all), `tools/market/marketModel.js` (run|daemon|status), `tools/migrate/importLegacyDb.js --source <db>` (legacy fredy DB import). Deployment: `doc/DEPLOYMENT.md`.
+
 ## Coding
 - After building the task, run the linter
 - After building the task, run the tests

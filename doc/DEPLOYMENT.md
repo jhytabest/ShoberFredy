@@ -48,8 +48,10 @@ opens its database handle read-only in-process.
   the adapterless "zz Shadow" jobs, and the homeserver_backfill_hides table**
   — the database ends up trimmed to active data only. Both run automatically
   at first start.
-- Alert on `fredy_geocoding_healthy == 0`: pipeline runs abort (nothing is
-  ingested) while the geocoder is unavailable. Backfill afterwards is manual:
+- Fredy's standard `GET /health` endpoint returns `503` while geocoding is
+  unavailable, so the ordinary container-health and application-probe alerts
+  cover this failure without a Fredy-specific alert. Pipeline runs abort while
+  unhealthy, so nothing is partially ingested. Backfill afterwards is manual:
   `docker exec fredy node tools/market/geocoderBackfill.js run`.
 
 ## Migrating the existing database

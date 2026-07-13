@@ -73,6 +73,6 @@ VOLUME /db
 VOLUME /conf
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:9998/ || exit 1
+  CMD curl --fail --silent --show-error --max-time 5 http://localhost:9998/health || exit 1
 
 CMD ["node", "index.js"]

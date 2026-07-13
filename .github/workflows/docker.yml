@@ -71,11 +71,12 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       # Homeserver is a single amd64 box; skipping arm64 halves build time.
-      - name: Build and push Docker image
+      - name: Build Docker image for verification
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          load: true
+          push: false
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -83,10 +84,14 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Smoke-test container health with docker compose
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           echo "Starting container with docker compose..."
           mkdir -p ./db ./conf && chmod 777 ./db ./conf
-          docker compose up --build -d shoberfredy
+          SHOBERFREDY_IMAGE=$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)
+          export SHOBERFREDY_IMAGE
+          docker compose up --no-build -d shoberfredy
           echo "Waiting for container start_period..."
           sleep 60
 
@@ -114,6 +119,14 @@ jobs:
           done
           echo "Container healthy."
           docker compose down
+
+      - name: Publish verified Docker image
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "$IMAGE_TAGS"
 
       - name: Trigger Fredy-only homeserver deployment
         if: github.ref == 'refs/heads/master'

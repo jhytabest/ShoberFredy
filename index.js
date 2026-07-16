@@ -98,11 +98,11 @@ if (process.env.FREDY_MARKET_MODEL_INTERVAL_SECONDS !== '0') {
   try {
     await initMarketModel();
     const retrain = () => {
-      try {
-        runMarketModelOnce();
-      } catch (error) {
-        logger.error('Market model retrain failed; keeping previous model state', error);
-      }
+      // Async: the GBM half trains in a short-lived Python child process,
+      // and either family failing keeps its previous artifact serving.
+      runMarketModelOnce().catch((error) =>
+        logger.error('Market model retrain failed; keeping previous model state', error),
+      );
     };
     // First retrain shortly after boot (off the critical startup path), then
     // on the configured interval (default daily).

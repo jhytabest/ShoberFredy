@@ -39,10 +39,12 @@ const COUNTED_TABLES = [
   'homeserver_backfill_hides',
   'homeserver_geocode_cache',
   'homeserver_listing_scores',
+  'homeserver_listing_model_scores',
   'homeserver_model_runs',
   'homeserver_listing_market_model',
   'homeserver_market_surface_cells',
   'homeserver_model_state',
+  'homeserver_models',
 ];
 
 function parseArgs(argv) {

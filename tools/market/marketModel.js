@@ -24,7 +24,7 @@ const mode = process.argv[2] || 'run';
 if (mode === 'daemon') {
   await runMarketModelDaemon();
 } else if (mode === 'run') {
-  runMarketModelOnce();
+  await runMarketModelOnce();
 } else if (mode === 'status') {
   console.log(JSON.stringify(getMarketModelStatus(), null, 2));
 } else {

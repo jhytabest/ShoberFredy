@@ -25,6 +25,30 @@ docker exec shoberfredy node tools/market/marketModel.js run|status
 docker exec shoberfredy node tools/market/geocoderBackfill.js run|status|refresh-all
 ```
 
+## Dual market models
+
+Every retrain fits TWO model families as equals on the same corpus and both
+scores appear in notifications and metrics (`model` label on the
+`fredy_market_*` prediction families):
+
+- **ridge** — pure-JS regression kriging (hedonic ridge + spatial residual
+  field), self-calibrating (λ and recency half-life by spatially blocked CV),
+  with Mondrian split-conformal intervals. Trains in-process; no external
+  dependencies.
+- **gbm** — LightGBM quantile regression trained by a short-lived Python
+  batch process (`tools/market/train_gbm.py`, venv at `/opt/market-venv`,
+  `FREDY_PYTHON_BIN` overrides). Scored in-process by a pure-JS evaluator of
+  the dumped trees, so Python is never on the scrape/notify path. If Python
+  or LightGBM is missing/broken, the GBM family skips the retrain and its
+  previous artifact keeps serving — the ridge family is unaffected.
+
+Artifacts live in the `homeserver_models` registry (one row per family);
+per-listing save-time scores in `homeserver_listing_model_scores`. Interval
+coverage is env-tunable via `FREDY_MARKET_INTERVAL_LEVEL` (default `0.8`).
+Migration 26 drops the legacy single-model `homeserver_model_state`; the
+first retrain (~60 s after boot) repopulates the registry, and until then
+listings are stored unscored (fail-open), exactly like a fresh install.
+
 ## Homeserver integration
 
 The homeserver repository uses the prebuilt image directly. Its Fredy Compose

@@ -119,9 +119,11 @@ specs, spatial) only set `listings.hidden_reason` ('blacklist' | 'spec_filter'
 | 'area_filter' | 'no_coordinates'; NULL = visible). Only visible listings are
 notified. Duplicates (similarity cache + cross-portal DB check in
 `lib/services/listings/dedupe.js`) are never stored. Structured attributes are
-parsed at scrape time into `listing_attributes` (migration 24), and the market
-score is computed pre-save and persisted with the listing (`storeListings`).
-notify.js renders the score line into notifications.
+parsed at scrape time into `listing_attributes` (migration 24). TWO market
+models ('ridge' and 'gbm' families, trained as equals — see below) score every
+listing pre-save; the per-family scores are persisted with the listing
+(`storeListings` → `homeserver_listing_model_scores`, migration 26) and
+notify.js renders both onto the score line.
 
 Single-container architecture — index.js also starts, in-process:
 - Prometheus market exporter on :9217 (`lib/services/market/metricsExporter.js`, `FREDY_MARKET_EXPORTER_PORT`, 0 disables)
@@ -131,11 +133,28 @@ Geocoding is Google-only (`GOOGLE_GEOCODING_API_KEY`) and STRICT: when the
 geocoder is unavailable (no key, quota, transport) the pipeline run aborts
 before save — nothing is stored, listings return on the next run, and the
 exporter flags `fredy_geocoding_healthy 0`. There is no geocoding cron; the
-backfill CLI is manual-only. Cache table: homeserver_geocode_cache. The model
-trains on non-blacklisted rows of notifying jobs and prefers stored
-listing_attributes over re-parsing text. Blacklist matches title + search
-snippet by default; the enriched detail description only with the
-`blacklist_filter_on_provider_details` user setting.
+backfill CLI is manual-only. Cache table: homeserver_geocode_cache. Blacklist
+matches title + search snippet by default; the enriched detail description
+only with the `blacklist_filter_on_provider_details` user setting.
+
+Market models (dual, equals): one shared corpus
+(`lib/services/market/corpus.js`: cold-equivalent-rent target — parsed
+Kaltmiete / declared cold / warm-minus-charges imputation; warm-without-
+breakdown and unknown prices are scored but never trained on; MAD-based
+outlier trim; duplicate clusters; rows without coordinates kept). Families:
+`ridge` (`models/ridgeModel.js`, standardized robust ridge + spatial residual
+field, λ and recency half-life by spatially blocked CV) and `gbm`
+(`models/gbmModel.js` + `tools/market/train_gbm.py`, LightGBM quantile
+regression in a short-lived Python child process, scored in-process by the
+pure-JS `models/gbmTreeEvaluator.js`; Python is never on the scrape path and
+a missing Python/LightGBM only skips the gbm retrain). Both carry Mondrian
+split-conformal intervals (per coordinate-quality tier: trusted/coarse/
+missing; level via `FREDY_MARKET_INTERVAL_LEVEL`, default 0.8), are evaluated
+on identical spatially-blocked folds (MdAPE/PPE10 + interval coverage/width,
+per-family rows in `homeserver_model_runs`), and persist artifacts in the
+`homeserver_models` registry read by `lib/services/scoring/marketScore.js`.
+Trainers prefer stored listing_attributes over re-parsing text. Artifacts are
+validated structurally (feature-vector length), not by version strings.
 
 CLIs: `tools/market/geocoderBackfill.js` (run|status|refresh-all; manual only), `tools/market/marketModel.js` (run|daemon|status), `tools/migrate/importLegacyDb.js --source <db>` (legacy fredy DB import). Deployment: `doc/DEPLOYMENT.md`.
 

@@ -46,7 +46,7 @@ describe('parseListingAttrs', () => {
     expect(attrs.rooms).toBe(2);
   });
 
-  it('derives cold rent from warm minus service charges', () => {
+  it('leaves warm-to-cold conversion to the shared market target', () => {
     const attrs = parseListingAttrs({
       provider: 'wgGesucht',
       title: 'Wohnung',
@@ -54,7 +54,9 @@ describe('parseListingAttrs', () => {
       price: 1000,
     });
     expect(attrs.priceType).toBe('warm');
-    expect(attrs.coldRentEur).toBe(800);
+    expect(attrs.coldRentEur).toBeNull();
+    expect(attrs.warmRentEur).toBe(1000);
+    expect(attrs.serviceChargesEur).toBe(200);
   });
 
   it('falls back to provider defaults for the price type', () => {

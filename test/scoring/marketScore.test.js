@@ -190,11 +190,11 @@ describe('marketScore (dual models)', () => {
     });
 
     it('imputes cold rent for warm listings and labels the kind', () => {
-      const score = scoreListingNow(listing, {
-        ...baseAttrs,
-        priceType: 'warm',
-        warmRentEur: 1040,
-        serviceChargesEur: 200,
+      const score = scoreListingNow({
+        ...listing,
+        provider: 'wgGesucht',
+        price: 1040,
+        description: 'Gesamtmiete: 1.040 €\nNebenkosten: 200 €',
       });
       expect(score.priceType).toBe('cold_est');
       expect(score.actualPricePerSqm).toBeCloseTo(840 / 70, 5);

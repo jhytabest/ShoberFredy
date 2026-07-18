@@ -49,25 +49,28 @@ index.js (startup)
   ├── api.js                    # starts fastify HTTP server
   ├── initJobExecutionService() # registers event-bus listeners + starts scheduler
   ├── startParserWorker()       # continuous live-first durable parser
-  └── startNotificationDispatcher() # independent 15-minute outbox timer
+  └── startNotificationDispatcher() # independent hourly digest timer
 
 scheduler (every N minutes) or manual trigger via POST /api/jobs/:id/run
   └── FredyPipelineExecutioner.execute()
       1. queryStringMutator(url)           # inject sort-by-date param
       2. provider.getListings()            # API or Puppeteer+Cheerio
       3. provider.normalize(listing)       # raw → ParsedListing
-      4. provider.filter(listing)          # blacklist + required fields
+      4. provider.filter(listing)          # broken-row filter + required fields
       5. filter to hashes not in DB or parsing queue
       6. provider.captureDetails()         # complete API/HTML evidence
       7. optimize gallery to <=20 KB WebP
       8. enqueue persistent parsing capture
 
-parser worker (continuous, live before backfill)
-  deterministic → vision → text LLM → geocode/filter/dedupe/score
-  → canonical listing + notification outbox
+parser worker (continuous, live before backfill, LLM-only)
+  vision LLM (live only, 1 request) → text LLM (1 request)
+  → geocode/filter/dedupe/score → canonical listing + notification outbox
+  Consumes the queue exactly as fast as the LLM budget allows: budget/429
+  exhaustion defers items (no failure accounting) until the reset.
 
-notification dispatcher (every 15 minutes)
-  └── sends each pending adapter delivery idempotently
+notification dispatcher (hourly)
+  └── digest of all pending deliveries with structured fields, comments,
+      and persisted model scores; idempotent per adapter
 ```
 
 ### Plugin systems
@@ -127,12 +130,34 @@ Storage policy: EVERY non-duplicate listing is stored; job filters (blacklist,
 specs, spatial) only set `listings.hidden_reason` ('blacklist' | 'spec_filter'
 | 'area_filter' | 'no_coordinates'; NULL = visible). Only visible listings are
 notified. Duplicates (similarity cache + cross-portal DB check in
-`lib/services/listings/dedupe.js`) are never stored. Structured attributes are
-parsed at scrape time into `listing_attributes` (migration 24). TWO market
-models ('ridge' and 'gbm' families, trained as equals — see below) score every
-listing pre-save; the per-family scores are persisted with the listing
-(`storeListings` → `homeserver_listing_model_scores`, migration 26) and
-notify.js renders both onto the score line.
+`lib/services/listings/dedupe.js`) are never stored; the cache is checked
+read-only during finalize and committed only after a successful store, so
+retries stay idempotent. TWO market models ('ridge' and 'gbm' families,
+trained as equals — see below) score every listing pre-save; the per-family
+scores are persisted with the listing (`storeListings` →
+`homeserver_listing_model_scores`, migration 26) and the hourly digest
+renders both onto the score line from the persisted rows.
+
+Extraction is LLM-only (`lib/services/pipeline/listingSchema.js`, migration
+28): every listing gets exactly one vision request (live items with stored
+images) and one text request against OpenRouter. The schema is strictly
+structured — enum-constrained `listing_type`/`property_type`/`condition`/
+`heating_type`/`energy.class`/amenity vocabulary, numeric sanity ranges, a
+normalized `availability` enum + ISO `available_from` — plus a free-text
+`comments` field capturing everything that does not fit the fields
+(persisted in `listing_attributes.comments`, shown in notifications). There
+is no deterministic parsing fallback; `lib/services/scoring/listingAttrs.js`
+survives only as a dependency of historical migration 24.
+
+LLM budget (`lib/services/pipeline/llmBudget.js`, table `llm_budget_usage`):
+every OpenRouter request consumes one unit of `FREDY_LLM_DAILY_LIMIT`
+(default 1000/day, persisted per UTC day). Backfill may use at most
+`FREDY_LLM_BACKFILL_SHARE` (default 0.5) of it; live always has priority and
+may consume everything. Budget exhaustion and upstream 429s are never
+failures: the queue defers (`deferQueue`, no attempt accounting) and waits
+for the reset. Backfill parses text-only and is driven by
+`tools/parsing/backfill.js` (enqueue|status|pause|resume); re-enqueueing
+under a bumped `PIPELINE_SCHEMA_VERSION` supersedes unfinished older rows.
 
 Single-container architecture — index.js also starts, in-process:
 
@@ -160,8 +185,9 @@ missing; level via `FREDY_MARKET_INTERVAL_LEVEL`, default 0.8), are evaluated
 on identical spatially-blocked folds (MdAPE/PPE10 + interval coverage/width,
 per-family rows in `homeserver_model_runs`), and persist artifacts in the
 `homeserver_models` registry read by `lib/services/scoring/marketScore.js`.
-Trainers prefer stored listing_attributes over re-parsing text. Artifacts are
-validated structurally (feature-vector length), not by version strings.
+Trainers read stored listing_attributes exclusively (no text re-parsing).
+Artifacts are validated structurally (feature-vector length), not by version
+strings.
 
 CLIs: `tools/market/geocoderBackfill.js` (run|status|refresh-all; manual only), `tools/market/marketModel.js` (run|daemon|status), `tools/migrate/importLegacyDb.js --source <db>` (legacy fredy DB import). Deployment: `doc/DEPLOYMENT.md`.
 

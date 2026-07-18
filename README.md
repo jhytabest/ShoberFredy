@@ -208,19 +208,29 @@ Immoscout has implemented advanced bot detection. In order to work around this, 
 
 Scheduled jobs only discover listings, capture their complete provider detail,
 compress gallery media to WebP files of at most 20,000 bytes, and enqueue that
-evidence in SQLite. A live-first worker performs deterministic parsing, image
-analysis, structured text-model parsing, geocoding, filtering, deduplication,
-and scoring. Notifications are dispatched independently every 15 minutes with
-per-adapter retry and idempotency.
+evidence in SQLite. A live-first worker extracts every listing with the LLM:
+one vision request over the gallery (live listings) and one structured text
+request against a strict enum-constrained schema with a free-text `comments`
+overflow field. Geocoding, filtering, deduplication, and scoring follow, then
+an hourly digest notification carries the most relevant structured fields, the
+comments, and both model scores per listing.
+
+The queue is consumed exactly as fast as the LLM allows. Every request draws
+from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —
+matching the OpenRouter free tier); backfill may spend at most
+`FREDY_LLM_BACKFILL_SHARE` (default 0.5) of it while live listings always take
+priority. When the budget or the upstream rate limit is exhausted, queue items
+simply wait for the reset — nothing ever falls back or fails because of rate
+limits.
 
 Native development loads `.env.local`; Docker Compose uses the same file when
 present. Set `OPENROUTER_API_KEY` and `GOOGLE_GEOCODING_API_KEY` there. The model,
-rate, worker, notification, and backfill defaults can be overridden with the
-`FREDY_LLM_*`, `FREDY_OPENROUTER_*`, `FREDY_PARSER_*`, `FREDY_NOTIFICATION_*`,
-and `FREDY_BACKFILL_*` environment variables.
+rate, worker, and notification defaults can be overridden with the
+`FREDY_LLM_*`, `FREDY_OPENROUTER_*`, `FREDY_PARSER_*`, and
+`FREDY_NOTIFICATION_*` environment variables.
 
-Historical listings from the four supported providers can be reparsed without
-opening their listing pages or APIs:
+Historical listings from the four supported providers can be reparsed
+text-only, without opening their listing pages or APIs:
 
 ```bash
 yarn parsing:backfill enqueue

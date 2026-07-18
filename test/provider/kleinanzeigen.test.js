@@ -4,7 +4,6 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import * as similarityCache from '../../lib/services/similarity-check/similarityCache.js';
 import { capturedQueue, mockFredy, providerConfig } from '../utils.js';
 import * as provider from '../../lib/provider/kleinanzeigen.js';
 import { closeBrowser, launchBrowser } from '../../lib/services/extractor/puppeteerExtractor.js';
@@ -24,7 +23,6 @@ describe('Kleinanzeigen capture producer', () => {
       provider.config,
       { id: 'kleinanzeigen', notificationAdapter: [], spatialFilter: null, specFilter: null },
       provider.metaInformation.id,
-      similarityCache,
       browser,
     );
     expect(await fredy.execute()).toHaveLength(1);

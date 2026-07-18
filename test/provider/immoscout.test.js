@@ -4,7 +4,6 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import * as similarityCache from '../../lib/services/similarity-check/similarityCache.js';
 import { capturedQueue, mockFredy, providerConfig } from '../utils.js';
 import * as provider from '../../lib/provider/immoscout.js';
 
@@ -18,7 +17,6 @@ describe('ImmoScout capture producer', () => {
       provider.config,
       { id: 'immoscout', notificationAdapter: [], spatialFilter: null, specFilter: null },
       provider.metaInformation.id,
-      similarityCache,
       undefined,
     );
     const queued = await fredy.execute();

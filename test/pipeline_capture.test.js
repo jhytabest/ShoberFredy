@@ -4,7 +4,6 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as similarityCache from '../lib/services/similarity-check/similarityCache.js';
 import { capturedQueue, mockFredy } from './utils.js';
 import * as mockStore from './mocks/mockStore.js';
 
@@ -39,7 +38,6 @@ describe('decoupled scrape producer', () => {
       providerConfig,
       { id: 'job-1', notificationAdapter: [], spatialFilter: null, specFilter: null },
       'test-provider',
-      similarityCache,
       undefined,
     );
 

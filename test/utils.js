@@ -13,6 +13,7 @@ export const providerConfig = JSON.parse(
 );
 
 export const sseEvents = [];
+export const capturedQueue = [];
 
 vi.mock('../lib/services/storage/listingsStorage.js', () => mockStore);
 vi.mock('../lib/services/storage/settingsStorage.js', () => mockStore);
@@ -33,6 +34,26 @@ vi.mock('../lib/services/sse/sse-broker.js', () => ({
   },
 }));
 vi.mock('../lib/notification/notify.js', () => ({ send }));
+vi.mock('../lib/services/pipeline/queueStorage.js', () => ({
+  isKnownSource: () => false,
+  enqueueCapture: (entry) => {
+    capturedQueue.push(entry);
+    return `queue-${capturedQueue.length}`;
+  },
+}));
+vi.mock('../lib/services/pipeline/imageOptimizer.js', () => ({
+  downloadAndOptimizeImages: async (images) =>
+    (images || []).map((image) => ({
+      ...image,
+      storagePath: '/tmp/test.webp',
+      contentHash: 'test-hash',
+      mimeType: 'image/webp',
+      byteSize: 1000,
+      width: 100,
+      height: 100,
+      downloadStatus: 'stored',
+    })),
+}));
 
 vi.mock('../lib/services/extractor/puppeteerExtractor.js', async (importOriginal) => {
   if (process.env.TEST_MODE !== 'offline') {

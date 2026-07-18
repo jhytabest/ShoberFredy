@@ -18,10 +18,13 @@ Fredy it adds, natively in the source tree:
   self-evaluation, surface GeoJSON for Grafana.
 - **Prometheus exporter** (`yarn market:exporter`): market, scraper-health,
   geocode and prediction metrics on `:9217/metrics`.
-- **Geocode backfill CLI** (`yarn geocode:backfill`) and a **legacy DB import
-  tool** (`yarn migrate:import --source /path/to/listings.db`).
-- Token-aware German blacklist matching (`wg`, `befristet`), detail-scrape
-  resilience, SQLite `busy_timeout` for multi-process access.
+- **Durable listing pipeline**: scheduled full-detail capture, 20 KB WebP media,
+  continuous deterministic + OpenRouter parsing, downstream geocoding/scoring,
+  and an idempotent 15-minute notification outbox.
+- **Rate-limited historical reparse** (`yarn parsing:backfill enqueue`) plus the
+  geocode backfill and legacy database import tools.
+- Token-aware German blacklist matching (`wg`, `befristet`) and SQLite
+  `busy_timeout` for multi-process access.
 
 Upstream docs below still apply. Credit and license: Christian Kellner,
 Apache-2.0 with Commons Clause and Attribution/Naming Clause.
@@ -51,14 +54,12 @@ Apache-2.0 with Commons Clause and Attribution/Naming Clause.
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Forangecoding%2Ffredy%2Ffredy&query=%24.downloadCount&label=Docker%20Pulls" alt="Docker Pulls" />
 </p>
 
-
-
 # Fredy 🏡 - Your Self-Hosted Real Estate Finder for Germany
 
 Finding an apartment or house in Germany can be stressful and
 time-consuming.\
 **Fredy** makes it easier: it automatically scrapes **ImmoScout24,
-Immowelt, Immonet, eBay Kleinanzeigen, and WG-Gesucht** and notifies you
+Immowelt, eBay Kleinanzeigen, and WG-Gesucht** and notifies you
 instantly via **Slack, Telegram, Email, ntfy, discord and more** when new
 listings appear.
 
@@ -66,32 +67,33 @@ With a modern architecture, Fredy provides a **clean Web UI**, removes
 duplicates across platforms, and stores results so you never see the
 same listing twice.
 
-------------------------------------------------------------------------
+---
 
 ## ✨ Key Features
 
--   🏠 Scrapes **ImmoScout24, Immowelt, Immonet, eBay Kleinanzeigen,
-    WG-Gesucht**
--   ⚡ Instant notifications: Slack, Telegram, Email (SendGrid,
-    Mailjet), ntfy, discord 
--   🔎 Uses the **ImmoScout Mobile API** (reverse engineered)
--   🌍 Runs anywhere: Docker, Node.js, self-hosted
--   🖥️ Intuitive **Web UI** to manage searches
--   🎯 Easy to use thanks to a user-friendly Web UI
--   🔄 Deduplication across platforms
--   ⏱️ Customizable search intervals
+- 🏠 Scrapes **ImmoScout24, Immowelt, eBay Kleinanzeigen,
+  WG-Gesucht**
+- ⚡ Instant notifications: Slack, Telegram, Email (SendGrid,
+  Mailjet), ntfy, discord
+- 🔎 Uses the **ImmoScout Mobile API** (reverse engineered)
+- 🌍 Runs anywhere: Docker, Node.js, self-hosted
+- 🖥️ Intuitive **Web UI** to manage searches
+- 🎯 Easy to use thanks to a user-friendly Web UI
+- 🔄 Deduplication across platforms
+- ⏱️ Customizable search intervals
 
-------------------------------------------------------------------------
+---
 
 ## 🤝 Sponsorship [![](https://img.shields.io/static/v1?label=Sponsor&message=❤&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/orangecoding)
 
 I maintain Fredy and other open-source projects in my free time, if you find it useful, consider supporting the project ❤️
 
-#### Support me on 
-[Ko-Fi](https://ko-fi.com/orangecoding) |  [Github](https://github.com/sponsors/orangecoding)
+#### Support me on
+
+[Ko-Fi](https://ko-fi.com/orangecoding) | [Github](https://github.com/sponsors/orangecoding)
 ----
 
-Fredy is proudly backed by the **JetBrains Open Source Support Program**.   
+Fredy is proudly backed by the **JetBrains Open Source Support Program**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://www.jetbrains.com/company/brand/img/logo_jb_dos_3.svg">
@@ -99,12 +101,13 @@ Fredy is proudly backed by the **JetBrains Open Source Support Program**.
   <img alt="Jetbrains Open Source" src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg">
 </picture>
 
-------------------------------------------------------------------------
+---
 
 ## 👨‍🏫 Demo
+
 You can try out Fredy here: [Fredy Demo](https://fredy-demo.orange-coding.net/)
 
-------------------------------------------------------------------------
+---
 
 ## 🚀 Quick Start
 
@@ -113,7 +116,7 @@ You can try out Fredy here: [Fredy Demo](https://fredy-demo.orange-coding.net/)
 > [!NOTE]
 > In order to start Fredy, you must provide a config.json. As a start, use the one in this repo: https://github.com/orangecoding/fredy/blob/master/conf/config.json
 
-``` bash
+```bash
 docker run -d --name fredy \
   -v fredy_conf:/conf \
   -v fredy_db:/db \
@@ -123,16 +126,16 @@ docker run -d --name fredy \
 
 Logs:
 
-``` bash
+```bash
 docker logs fredy -f
 ```
 
 ### Manual (Node.js)
 
--   Requirement: **Node.js 22 or higher**
--   Install dependencies and start:
+- Requirement: **Node.js 22 or higher**
+- Install dependencies and start:
 
-``` bash
+```bash
 yarn
 yarn run start:backend   # in one terminal
 yarn run start:frontend  # in another terminal
@@ -145,18 +148,19 @@ yarn run start:frontend  # in another terminal
 Should you use [Unraid](https://unraid.net/), you can now install Fredy from the community store :)
 
 **Default Login:**
+
 - Username: `admin`
 - Password: `admin`
 
-------------------------------------------------------------------------
+---
 
 ## 📸 Screenshots
 
-| Fredy Maps View                                  | Dashboard                                               | Found Listings                                                              |
-|--------------------------------------------------|-----------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| Fredy Maps View                                  | Dashboard                                                             | Found Listings                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | ![Screenshot showing Fredy](doc/screenshot1.png) | ![Screenshot showing job configuration in Fredy](doc/screenshot3.png) | ![Screenshot showing found listings in Fredy](doc/screenshot2.png) |
 
-------------------------------------------------------------------------
+---
 
 ## 🧩 Core Concepts
 
@@ -165,7 +169,7 @@ Fredy is built around three simple concepts:
 ### Provider 🌐
 
 A **provider** is a real-estate platform (e.g. ImmoScout24, Immowelt,
-Immonet, eBay Kleinanzeigen, WG-Gesucht).\
+eBay Kleinanzeigen, WG-Gesucht).\
 When you create a job, you paste the search URL from the platform into
 Fredy.\
 ⚠️ Always make sure the search results are sorted by **date**, so Fredy
@@ -190,19 +194,44 @@ Jobs run automatically at the interval you configure (see
 ### MCP Server 🤖
 
 Starting with **V20**, Fredy ships with a built-in **MCP Server **. This allows you to connect Fredy to LLMs (like Claude, ChatGPT, or local models via LM Studio) and query your real estate data using natural language.
-The local LLM can even enrich existing listings by checking the listing online.   
+The local LLM can even enrich existing listings by checking the listing online.
 
 For more information on how to set it up and use it, please refer to the [MCP Readme](lib/mcp/README.md).
 
-------------------------------------------------------------------------
+---
 
 ## Immoscout
 
 Immoscout has implemented advanced bot detection. In order to work around this, we are using a reversed engineered version of their mobile api. See [Immoscout Reverse Engineering Documentation](https://github.com/orangecoding/fredy/blob/master/reverse-engineered-immoscout.md)
 
+## Durable parsing pipeline
+
+Scheduled jobs only discover listings, capture their complete provider detail,
+compress gallery media to WebP files of at most 20,000 bytes, and enqueue that
+evidence in SQLite. A live-first worker performs deterministic parsing, image
+analysis, structured text-model parsing, geocoding, filtering, deduplication,
+and scoring. Notifications are dispatched independently every 15 minutes with
+per-adapter retry and idempotency.
+
+Native development loads `.env.local`; Docker Compose uses the same file when
+present. Set `OPENROUTER_API_KEY` and `GOOGLE_GEOCODING_API_KEY` there. The model,
+rate, worker, notification, and backfill defaults can be overridden with the
+`FREDY_LLM_*`, `FREDY_OPENROUTER_*`, `FREDY_PARSER_*`, `FREDY_NOTIFICATION_*`,
+and `FREDY_BACKFILL_*` environment variables.
+
+Historical listings from the four supported providers can be reparsed without
+opening their listing pages or APIs:
+
+```bash
+yarn parsing:backfill enqueue
+yarn parsing:backfill status
+yarn parsing:backfill pause
+yarn parsing:backfill resume
+```
+
 ## 🛡️ Bot Detection & Proxies
 
-Most browser-based providers (immowelt, immonet, kleinanzeigen, ...) are scraped through a hardened headless browser ([CloakBrowser](https://www.npmjs.com/package/cloakbrowser)). It makes the **browser fingerprint** indistinguishable from a real Chrome, which is enough when you run Fredy on a normal home connection.
+The browser-based providers (Immowelt, Kleinanzeigen, and WG-Gesucht) are scraped through a hardened headless browser ([CloakBrowser](https://www.npmjs.com/package/cloakbrowser)). It makes the **browser fingerprint** indistinguishable from a real Chrome, which is enough when you run Fredy on a normal home connection.
 
 On a **server / VPS the requests usually originate from a datacenter IP**, and providers behind anti-bot systems (e.g. AWS CloudFront/WAF) block those based on **IP reputation alone**, no matter how perfect the fingerprint is. The typical symptom: it works locally but you get `We have been detected as a bot :-/` on the server.
 
@@ -223,14 +252,14 @@ Leave the field empty to disable. The proxy applies to all headless-browser prov
 
 Residential proxies are a paid service (usually billed per GB, Fredy's traffic is small). Well-known providers offering German residential IPs include:
 
-| Provider | Notes |
-|---|---|
-| [IPRoyal](https://iproyal.com) | Pay-as-you-go, no monthly minimum, good for low volume |
-| [Webshare](https://www.webshare.io) | Cheap entry tier, has a small free plan to test with |
-| [Decodo (formerly Smartproxy)](https://decodo.com) | Easy setup, country/city targeting |
-| [SOAX](https://soax.com) | Residential + mobile, fine-grained geo-targeting |
-| [Bright Data](https://brightdata.com) | Largest pool, most features, higher complexity/price |
-| [Oxylabs](https://oxylabs.io) | Enterprise-grade, larger plans |
+| Provider                                           | Notes                                                  |
+| -------------------------------------------------- | ------------------------------------------------------ |
+| [IPRoyal](https://iproyal.com)                     | Pay-as-you-go, no monthly minimum, good for low volume |
+| [Webshare](https://www.webshare.io)                | Cheap entry tier, has a small free plan to test with   |
+| [Decodo (formerly Smartproxy)](https://decodo.com) | Easy setup, country/city targeting                     |
+| [SOAX](https://soax.com)                           | Residential + mobile, fine-grained geo-targeting       |
+| [Bright Data](https://brightdata.com)              | Largest pool, most features, higher complexity/price   |
+| [Oxylabs](https://oxylabs.io)                      | Enterprise-grade, larger plans                         |
 
 This is not an endorsement, pick whatever fits your budget. For low-volume use like Fredy, a pay-as-you-go plan (e.g. IPRoyal) or a cheap entry tier (e.g. Webshare) is usually plenty. Make sure to select **Germany** as the proxy location and keep the search interval reasonable (the higher the interval, the less you look like a bot).
 
@@ -291,29 +320,36 @@ a debug bundle due to privacy reasons!
 
 ### Development Mode
 
-``` bash
+```bash
 yarn run start:backend:dev
 yarn run start:frontend:dev
 ```
+
 You should now be able to access _Fredy_ from your browser. Check your Terminal to see what port the frontend is running on.
 
 ### Run Tests
 
 ## "Online" tests
+
 These tests are directly executed against the actual providers.
-``` bash
+
+```bash
 yarn run test
 ```
 
 ## "Offline" tests
+
 These tests are using the test fixtures instead of the actual providers. Much faster and "good enough" to test the core functionality.
-``` bash
+
+```bash
 yarn run test:offline
 ```
 
 ## Download new fixtures
+
 If you have to refresh the fixtures (every once in a while needed because the providers change their code), run this command:
-``` bash
+
+```bash
 yarn run download-fixtures
 ```
 
@@ -322,6 +358,7 @@ yarn run download-fixtures
 Fredy's UI is fully multilingual. Translation files live in `ui/src/locales/`. To add a new language, create a single JSON file there, no code changes required.
 
 **Example: `ui/src/locales/fr.json`**
+
 ```json
 {
   "_meta": {
@@ -338,22 +375,22 @@ Fredy's UI is fully multilingual. Translation files live in `ui/src/locales/`. T
 
 The `_meta` fields:
 
-| Field | Description |
-|---|---|
-| `flag` | Unicode flag emoji shown in the language selector |
-| `name` | Display name shown in the language selector |
-| `locale` | BCP 47 locale string used for date and number formatting (e.g. `fr-FR`) |
+| Field        | Description                                                                     |
+| ------------ | ------------------------------------------------------------------------------- |
+| `flag`       | Unicode flag emoji shown in the language selector                               |
+| `name`       | Display name shown in the language selector                                     |
+| `locale`     | BCP 47 locale string used for date and number formatting (e.g. `fr-FR`)         |
 | `semiLocale` | Semi UI locale key for component-level strings (date pickers, pagination, etc.) |
 
 > **Important:** `semiLocale` must exactly match a locale filename from the Semi UI locale sources (without the `.js` extension). See the [available Semi UI locales on GitHub](https://github.com/DouyinFE/semi-design/tree/main/packages/semi-ui/locale/source) for the full list of supported keys.
 
 After adding the file, rebuild the frontend (`yarn build:frontend` or restart the dev server) and the new language will appear automatically in **Settings → User Settings → Language**.
 
-------------------------------------------------------------------------
+---
 
 ## 📐 Architecture
 
-``` mermaid
+```mermaid
 flowchart TD
  subgraph Jobs["Jobs"]
         A1["Job 1"]
@@ -382,8 +419,10 @@ flowchart TD
     F1 --> F2
 ```
 
-------------------------------------------------------------------------
+---
+
 ## 🤖 Using AI such as Claude Code
+
 When I started building Fredy, LLMs were still basically the wet dream of a few nerdy scientists.
 
 Nowadays, it’s easier than ever to throw a prompt into the LLM of your choice and let 'the AI' build your stuff. I’m not against that. I use Claude Code myself for smaller tasks, and I do think these tools can be really useful.
@@ -396,7 +435,7 @@ I’ve had one too many PRs full of hallucinated bullshit.
 
 **Thanks ;)**
 
-------------------------------------------------------------------------
+---
 
 ## 👐 Contributing
 
@@ -407,7 +446,7 @@ Thanks to everyone who has contributed!
 See the [Contributing
 Guide](https://github.com/orangecoding/fredy/blob/master/CONTRIBUTING.md).
 
-------------------------------------------------------------------------
+---
 
 ## ⭐ Star History
 

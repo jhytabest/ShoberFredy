@@ -18,6 +18,12 @@ import { initJobExecutionService } from './lib/services/jobs/jobExecutionService
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
 import { startMetricsExporter } from './lib/services/market/metricsExporter.js';
 import { initMarketModel, runMarketModelOnce, marketModelIntervalSeconds } from './lib/services/market/marketModel.js';
+import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
+import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
+
+if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
+  process.loadEnvFile('.env.local');
+}
 
 // Ensure the CloakBrowser stealth Chromium binary is present and complete before
 // jobs run.  ensureValidBinary() also detects and auto-heals partial extractions
@@ -77,9 +83,8 @@ ensureDemoUserExists();
 await initTrackerCron();
 //do not wait for this to finish, let it run in the background
 initActiveCheckerCron();
-// No geocoding cron: listings are geocoded at scrape time; a run aborts when
-// the geocoder is unavailable. Backfill is manual only
-// (tools/market/geocoderBackfill.js).
+// No geocoding cron: the durable parser geocodes after capture, while the
+// separate geocode/backfill CLIs remain available for maintenance.
 
 // Market services (single-container mode): Prometheus exporter on its own
 // port and the periodic market model retrain, both in-process.
@@ -116,5 +121,10 @@ if (process.env.FREDY_MARKET_MODEL_INTERVAL_SECONDS !== '0') {
 
 logger.info(`Started Fredy successfully. Ui can be accessed via http://localhost:${settings.port}`);
 
-// Initialize the lean Job Execution Service (schedules and bus listeners)
+// Independent durable consumers start before the scrape producer. Neither is
+// awaited by scheduled scrape runs.
+startParserWorker();
+startNotificationDispatcher();
+
+// Initialize the scrape/capture producer (schedules and bus listeners).
 initJobExecutionService({ providers, settings, intervalMs: INTERVAL });

@@ -26,6 +26,7 @@ doc/
 !README.md
 
 # Development config files
+.env.local
 .babelrc
 .husky/
 .nvmrc

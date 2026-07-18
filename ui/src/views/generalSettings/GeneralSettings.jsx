@@ -130,12 +130,7 @@ const GeneralSettings = function GeneralSettings() {
 
   // User settings state
   const homeAddress = useSelector((state) => state.userSettings.settings.home_address);
-  const providerDetails = useSelector((state) => state.userSettings.settings.provider_details);
-  const blacklistFilterOnProviderDetails = useSelector(
-    (state) => state.userSettings.settings.blacklist_filter_on_provider_details,
-  );
   const listingDeletionPreference = useSelector((state) => state.userSettings.settings.listing_deletion_preference);
-  const allProviders = useSelector((state) => state.provider);
   const [address, setAddress] = useState(homeAddress?.address || '');
   const [coords, setCoords] = useState(homeAddress?.coords || null);
   const [listingDeleteHard, setListingDeleteHard] = useState(false);
@@ -636,49 +631,6 @@ const GeneralSettings = function GeneralSettings() {
                       style={{ marginTop: 8 }}
                     />
                   )}
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.providerDetails')} helpText={t('settings.providerDetailsHelp')}>
-                  <Banner
-                    type="warning"
-                    description={t('settings.providerDetailsWarning')}
-                    closeIcon={null}
-                    style={{ marginBottom: 12 }}
-                  />
-                  <Select
-                    multiple
-                    style={{ width: '100%' }}
-                    value={Array.isArray(providerDetails) ? providerDetails : []}
-                    optionList={(allProviders ?? []).map((p) => ({ label: p.name, value: p.id }))}
-                    placeholder={t('settings.providerDetailsPlaceholder')}
-                    onChange={async (selected) => {
-                      try {
-                        await actions.userSettings.setProviderDetails(selected);
-                        Toast.success(t('settings.providerDetailsUpdated'));
-                      } catch {
-                        Toast.error(t('settings.providerDetailsUpdateError'));
-                      }
-                    }}
-                  />
-                </SegmentPart>
-
-                <SegmentPart
-                  name={t('settings.blacklistFilterOnProviderDetails')}
-                  helpText={t('settings.blacklistFilterOnProviderDetailsHelp')}
-                >
-                  <Checkbox
-                    checked={blacklistFilterOnProviderDetails === true}
-                    onChange={async (e) => {
-                      try {
-                        await actions.userSettings.setBlacklistFilterOnProviderDetails(e.target.checked);
-                        Toast.success(t('settings.blacklistFilterOnProviderDetailsUpdated'));
-                      } catch {
-                        Toast.error(t('settings.blacklistFilterOnProviderDetailsUpdateError'));
-                      }
-                    }}
-                  >
-                    {t('settings.blacklistFilterOnProviderDetailsEnable')}
-                  </Checkbox>
                 </SegmentPart>
 
                 <SegmentPart name={t('settings.listingDeletion')} helpText={t('settings.listingDeletionHelp')}>

@@ -2,10 +2,12 @@ node_modules/
 ui/public/
 db/*.json
 db/*.db*
+db/media/
 npm-debug.log
 .DS_Store
 .idea
 .vscode
 tools/release/config.json
 .agentsgeocoder.env
+.env.local
 __pycache__/

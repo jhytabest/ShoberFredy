@@ -338,42 +338,6 @@ export const useFredyState = create(
               throw Exception;
             }
           },
-          async setProviderDetails(providers) {
-            try {
-              await xhrPost('/api/user/settings/provider-details', { provider_details: providers });
-              set((state) => ({
-                userSettings: {
-                  ...state.userSettings,
-                  settings: { ...state.userSettings.settings, provider_details: providers },
-                },
-              }));
-            } catch (Exception) {
-              console.error('Error while trying to update provider details setting. Error:', Exception);
-              throw Exception;
-            }
-          },
-          async setBlacklistFilterOnProviderDetails(enabled) {
-            try {
-              await xhrPost('/api/user/settings/blacklist-filter-on-details', {
-                blacklist_filter_on_provider_details: enabled,
-              });
-              set((state) => ({
-                userSettings: {
-                  ...state.userSettings,
-                  settings: {
-                    ...state.userSettings.settings,
-                    blacklist_filter_on_provider_details: enabled,
-                  },
-                },
-              }));
-            } catch (Exception) {
-              console.error(
-                'Error while trying to update blacklist-filter-on-provider-details setting. Error:',
-                Exception,
-              );
-              throw Exception;
-            }
-          },
           async setListingsViewMode(listings_view_mode) {
             try {
               await xhrPost('/api/user/settings/listings-view-mode', { listings_view_mode });

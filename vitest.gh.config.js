@@ -10,13 +10,7 @@ export default mergeConfig(
   base,
   defineConfig({
     test: {
-      exclude: [
-        '**/node_modules/**',
-        'test/provider/immonet.test.js',
-        'test/provider/immobilienDe.test.js',
-        'test/provider/immowelt.test.js',
-        'test/provider/sparkasse.test.js',
-      ],
+      exclude: ['**/node_modules/**', 'test/provider/immowelt.test.js'],
     },
   }),
 );

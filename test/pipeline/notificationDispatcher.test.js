@@ -9,10 +9,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 describe('notification dispatcher', () => {
   let calls;
   let rows;
+  let scores;
+  let installedAdapters;
 
   beforeEach(() => {
-    calls = { sent: [], failed: [], cancelled: [], adapters: [] };
+    calls = { sent: [], failed: [], cancelled: [], adapters: [], listings: [] };
     rows = [];
+    scores = new Map();
+    installedAdapters = ['working', 'broken'];
   });
 
   async function loadDispatcher(job) {
@@ -20,6 +24,7 @@ describe('notification dispatcher', () => {
     vi.resetModules();
     vi.doMock(`${root}/lib/services/pipeline/notificationOutbox.js`, () => ({
       getDueDeliveries: () => rows,
+      getListingScores: () => scores,
       markDeliveriesSent: (ids) => calls.sent.push(ids),
       markDeliveriesFailed: (ids) => calls.failed.push(ids),
       markDeliveriesCancelled: (ids) => calls.cancelled.push(ids),
@@ -29,8 +34,10 @@ describe('notification dispatcher', () => {
       getSettings: async () => ({ baseUrl: '' }),
     }));
     vi.doMock(`${root}/lib/notification/notify.js`, () => ({
-      send: (_provider, _listings, adapters) => {
+      hasAdapter: (id) => installedAdapters.includes(id),
+      send: (_provider, listings, adapters) => {
         calls.adapters.push(adapters[0].id);
+        calls.listings.push(listings);
         if (adapters[0].id === 'broken') throw new Error('delivery failed');
         return [Promise.resolve()];
       },
@@ -62,6 +69,53 @@ describe('notification dispatcher', () => {
     expect(calls.cancelled).toEqual([['delivery-1']]);
     expect(calls.adapters).toEqual([]);
   });
+
+  it('cancels instead of falsely marking sent when the adapter module is missing', async () => {
+    rows = [delivery('delivery-1', 'uninstalled', 0)];
+    const dispatcher = await loadDispatcher({
+      id: 'job-1',
+      enabled: true,
+      notificationAdapter: [{ id: 'uninstalled' }],
+    });
+    await dispatcher.dispatchDueNotifications();
+    expect(calls.cancelled).toEqual([['delivery-1']]);
+    expect(calls.sent).toEqual([]);
+  });
+
+  it('enriches digest listings with structured fields, comments, and the persisted score', async () => {
+    rows = [
+      {
+        ...delivery('delivery-1', 'working', 0),
+        listing_type: 'rental',
+        property_type: 'apartment',
+        cold_rent_eur: 900,
+        warm_rent_eur: 1150,
+        floor: 2,
+        building_year: 1910,
+        availability: 'date',
+        available_from: '2026-09-01',
+        furnished: 1,
+        pets_allowed: 1,
+        amenities_json: JSON.stringify(['balcony', 'elevator']),
+        comments: 'Tausch nur gegen 3-Zimmer in Kreuzberg.',
+      },
+    ];
+    scores = new Map([['listing-1', { actualPricePerSqm: 20, priceType: 'cold', swap: false, models: {} }]]);
+    const dispatcher = await loadDispatcher({
+      id: 'job-1',
+      enabled: true,
+      notificationAdapter: [{ id: 'working' }],
+    });
+    await dispatcher.dispatchDueNotifications();
+    expect(calls.sent).toEqual([['delivery-1']]);
+    const [listing] = calls.listings[0];
+    expect(listing.address).toContain('rental');
+    expect(listing.address).toContain('cold 900 €');
+    expect(listing.address).toContain('available 2026-09-01');
+    expect(listing.address).toContain('balcony, elevator');
+    expect(listing.address).toContain('Tausch nur gegen 3-Zimmer in Kreuzberg.');
+    expect(listing.marketScore).toEqual(scores.get('listing-1'));
+  });
 });
 
 function delivery(id, adapterId, adapterOrdinal) {
@@ -78,5 +132,6 @@ function delivery(id, adapterId, adapterOrdinal) {
     price: 1000,
     size: 50,
     rooms: 2,
+    address: 'Teststraße 1',
   };
 }

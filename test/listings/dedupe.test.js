@@ -22,7 +22,7 @@ const { dropDuplicates } = await import('../../lib/services/listings/dedupe.js')
 const { ensureCacheTable, saveCache } = await import('../../lib/services/geocoding/geocodeCache.js');
 const { addressKey } = await import('../../lib/services/geocoding/address.js');
 
-const neverSimilar = { checkAndAddEntry: () => false };
+const neverSimilar = { hasEntry: () => false };
 
 function seedSchema(db) {
   db.exec(`
@@ -63,7 +63,7 @@ describe('dropDuplicates', () => {
   });
 
   it('drops listings the similarity cache knows', () => {
-    const alwaysSimilar = { checkAndAddEntry: () => true };
+    const alwaysSimilar = { hasEntry: () => true };
     const kept = dropDuplicates([{ id: 'a', title: 'x', price: 100, address: 'addr' }], {
       similarityCache: alwaysSimilar,
       providerId: 'p',

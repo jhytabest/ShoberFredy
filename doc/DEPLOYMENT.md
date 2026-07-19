@@ -23,7 +23,27 @@ The old standalone modes still exist for ad-hoc use inside the container:
 ```bash
 docker exec shoberfredy node tools/market/marketModel.js run|status
 docker exec shoberfredy node tools/market/geocoderBackfill.js run|status|refresh-all
+docker exec shoberfredy node tools/parsing/backfill.js enqueue|status|pause|resume
 ```
+
+## LLM budget
+
+Extraction is LLM-only: one vision request per live listing (gallery) plus one
+structured text request per listing; backfill parses text-only. Every request
+draws from a persistent daily budget stored in the database:
+
+- `FREDY_LLM_DAILY_LIMIT` (default 1000, the OpenRouter free-tier allowance),
+- `FREDY_LLM_BACKFILL_SHARE` (default 0.5) — backfill's maximum share; live
+  parsing always has priority and may consume the whole budget.
+
+Budget exhaustion and upstream 429s are pacing, not failures: queue items wait
+until the reported reset (or the next UTC day) and then continue. Nothing is
+skipped, degraded, or dead-lettered because of rate limits. Watch
+`fredy_llm_budget_used_requests` / `fredy_llm_budget_blocked` on the exporter.
+
+Notifications are an hourly digest per job/adapter (override with
+`FREDY_NOTIFICATION_INTERVAL_MS`), rendering each listing with its structured
+fields, the extraction comments, and both persisted model scores.
 
 ## Dual market models
 

@@ -21,6 +21,7 @@ import { initMarketModel, runMarketModelOnce, marketModelIntervalSeconds } from 
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
+import { markInterruptedLlmAudits } from './lib/services/pipeline/llmAuditStorage.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
@@ -48,6 +49,9 @@ if (!isConfigAccessible) {
 
 // Run DB migrations once at startup and block until finished
 await runMigrations();
+const interruptedAudits = markInterruptedLlmAudits();
+if (interruptedAudits)
+  logger.warn(`Closed ${interruptedAudits} interrupted LLM audit call(s) from the previous process.`);
 
 const settings = await getSettings();
 

@@ -265,13 +265,17 @@ Important parsing settings:
 | `FREDY_LLM_BACKFILL_SHARE`             | `0.8`   | Maximum share available to historical migration. |
 | `FREDY_PARSER_BACKFILL_BURST`          | `3`     | Backfill calls allowed after each live call.     |
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
+| `FREDY_DISCOVERY_MAX_PAGES`            | provider| Result pages visited per scheduled provider run. |
+| `FREDY_DETAIL_FETCH_BATCH_SIZE`        | `25`    | Detail pages fetched per provider invocation.    |
 
 Migration 30 automatically queues every existing listing for schema-v4 text
 extraction using the best retained detail capture, falling back to its stored
-description only when no capture exists. Base listing rows remain intact while
-structured attributes are replaced only by validated v4 results. Legacy model
-artifacts and scores are cleared so retraining uses the v4 feature space. Check
-or repair migration progress without opening historical listing pages or APIs:
+description only when no capture exists. Migration 31 keeps the former semantic
+columns in `legacy_snapshot_json` for audit and replaces the canonical title,
+address, price, size, rooms, coordinates, filters, and attributes exclusively
+from the validated v4 result. Null LLM facts remain null. Legacy model artifacts
+and scores are cleared so retraining uses only the v4 feature space. Check or
+repair migration progress without opening historical listing pages or APIs:
 
 ```bash
 yarn parsing:backfill enqueue

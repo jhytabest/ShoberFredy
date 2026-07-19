@@ -20,6 +20,7 @@ import { startMetricsExporter } from './lib/services/market/metricsExporter.js';
 import { initMarketModel, runMarketModelOnce, marketModelIntervalSeconds } from './lib/services/market/marketModel.js';
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
+import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
@@ -124,6 +125,7 @@ logger.info(`Started Fredy successfully. Ui can be accessed via http://localhost
 // Independent durable consumers start before the scrape producer. Neither is
 // awaited by scheduled scrape runs.
 startParserWorker();
+startRatingWorker();
 startNotificationDispatcher();
 
 // Initialize the scrape/capture producer (schedules and bus listeners).

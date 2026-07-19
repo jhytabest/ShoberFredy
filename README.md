@@ -8,8 +8,8 @@ Fredy it adds, natively in the source tree:
 - **Google Geocoding** with a persistent cache (`homeserver_geocode_cache`),
   Berlin-aware plausibility checks, and fail-open behavior when Google is
   unavailable (listings are kept, not silently dropped by the spatial filter).
-- **Save-time market scoring**: every stored listing is priced against a
-  persisted hedonic + spatial-residual model; notifications carry a
+- **Durable market rating**: every LLM-parsed listing is queued and priced
+  against a persisted hedonic + spatial-residual model; notifications carry a
   `Model: … €/m² vs fair … €/m²` metrics line.
 - **Cross-portal dedupe**: a flat already notified from another portal/job in
   the last 7 days is soft-hidden instead of re-notified.
@@ -18,9 +18,10 @@ Fredy it adds, natively in the source tree:
   self-evaluation, surface GeoJSON for Grafana.
 - **Prometheus exporter** (`yarn market:exporter`): market, scraper-health,
   geocode and prediction metrics on `:9217/metrics`.
-- **Durable LLM-only listing pipeline**: scheduled full-detail capture, required
-  audited OpenRouter text extraction, downstream geocoding/scoring, and an
-  idempotent notification outbox. There is no non-LLM extraction path.
+- **Durable LLM-only listing pipeline**: paginated discovery, separately queued
+  full-detail capture, required audited OpenRouter text extraction, queued
+  market rating, and an idempotent notification outbox. Discovery-card values
+  never become canonical listing facts.
 - **Rate-limited historical reparse** (`yarn parsing:backfill enqueue`) plus the
   geocode backfill and legacy database import tools.
 - Token-aware German blacklist matching (`wg`, `befristet`) and SQLite
@@ -207,15 +208,31 @@ Immoscout has implemented advanced bot detection. In order to work around this, 
 
 ## Durable parsing pipeline
 
-Scheduled jobs only discover listings, capture their complete provider detail,
-compress gallery media to WebP files of at most 20,000 bytes, and enqueue that
-evidence in SQLite. A durable worker extracts every listing with a required
-structured text LLM request against a strict enum-constrained schema with a
-free-text `comments` overflow field. Vision is disabled by default and, when
-explicitly enabled, is supplemental: it can never block text parsing.
-Geocoding, filtering, deduplication, and scoring follow, then
-an hourly digest notification carries the most relevant structured fields, the
-comments, and both model scores per listing.
+Scheduled jobs paginate provider result lists and put each discovery card in a
+durable detail-fetch queue. Stable provider ID or canonical URL is the first
+dedupe key. Detail pages are then fetched separately and exact evidence versions
+are deduplicated before they enter the parsing queue. Provider pages marked
+`gelöscht` or `reserviert` are retained as inactive audit evidence and never
+enter parsing. Active detail evidence is conservatively cleaned, while the
+untouched raw text is retained for audit. Gallery media may be compressed for
+display, but media is not part of database backups.
+
+Stored active listings receive one provider reachability check at startup and
+then daily at 01:00, for at most seven days. A Kleinanzeigen page containing
+`Gelöscht` or `Reserviert`, any non-success response, or a network failure ends
+the listing immediately; recognized bot blocking leaves it active for the next
+daily pass. Listings still active at seven days expire locally. Every transition
+records `inactive_at` and `inactive_reason`.
+
+A durable worker extracts every active listing with a required structured text
+LLM request against a strict, compact schema with a free-text `comments`
+overflow field. The LLM receives detail-page/API evidence only. Discovery-card
+title, address, price, size, and rooms are never fallbacks after LLM extraction;
+unknown values remain null/unknown. Vision is disabled by default and, when
+explicitly enabled, is supplemental: it can never block text parsing. Validated
+LLM fields then drive geocoding, filtering, semantic deduplication, storage, and
+the market model. Rating and notification each use their own durable queue, so a
+process restart cannot strand an accepted listing.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —
@@ -249,11 +266,12 @@ Important parsing settings:
 | `FREDY_PARSER_BACKFILL_BURST`          | `3`     | Backfill calls allowed after each live call.     |
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
 
-Migration 29 automatically queues every existing listing for schema-v3 text
-extraction. Base listings remain intact, while legacy attributes and models are
-removed and rebuilt only from validated v3 results. Pending notifications wait
-for that listing's migration. Check or repair the migration without opening
-historical listing pages or APIs:
+Migration 30 automatically queues every existing listing for schema-v4 text
+extraction using the best retained detail capture, falling back to its stored
+description only when no capture exists. Base listing rows remain intact while
+structured attributes are replaced only by validated v4 results. Legacy model
+artifacts and scores are cleared so retraining uses the v4 feature space. Check
+or repair migration progress without opening historical listing pages or APIs:
 
 ```bash
 yarn parsing:backfill enqueue

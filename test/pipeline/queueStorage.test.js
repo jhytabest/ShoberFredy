@@ -103,7 +103,7 @@ describe('persistent parsing queues', () => {
     expect(oldRow.status).toBe('cancelled');
   });
 
-  it('revives dead backfill rows on re-enqueue', () => {
+  it('keeps failed backfill rows retryable instead of terminal', () => {
     const id = queue.enqueueCapture({
       jobId: 'job-1',
       provider: 'immoscout',
@@ -112,19 +112,10 @@ describe('persistent parsing queues', () => {
       queueKind: 'backfill',
       listingId: 'listing-1',
     });
-    queue.markQueueDead(id, new Error('poison'));
-    const revived = queue.enqueueCapture({
-      jobId: 'job-1',
-      provider: 'immoscout',
-      sourceHash: 'old-hash',
-      capture: sampleCapture('backfill'),
-      queueKind: 'backfill',
-      listingId: 'listing-1',
-    });
-    expect(revived).toBe(id);
+    queue.retryQueue(id, new Error('poison'), { delayMs: 1 });
     const row = db.prepare('SELECT status, attempt_count FROM parsing_queue WHERE id = ?').get(id);
-    expect(row.status).toBe('pending');
-    expect(row.attempt_count).toBe(0);
+    expect(row.status).toBe('retry');
+    expect(row.attempt_count).toBe(1);
   });
 
   it('claims nothing needing LLM work while the budget is exhausted, but still claims cached items', () => {

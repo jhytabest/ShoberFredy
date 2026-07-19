@@ -13,7 +13,7 @@ describe('parser worker', () => {
   let visionBehavior;
 
   beforeEach(() => {
-    calls = { deferred: [], retried: [], dead: [], completed: [], vision: [], llm: [], finalized: [] };
+    calls = { deferred: [], retried: [], completed: [], vision: [], llm: [], finalized: [] };
     extraction = null;
     llmBehavior = async () => ({ listing: { title: 'ok' }, model: 'text-model', durationMs: 5 });
     visionBehavior = async () => ({
@@ -32,7 +32,6 @@ describe('parser worker', () => {
       deferQueue: (id, reason, untilMs, options) => calls.deferred.push({ id, reason, untilMs, options }),
       getExtraction: () => extraction,
       getQueueImages: () => [],
-      markQueueDead: (id, error) => calls.dead.push({ id, error: String(error?.message || error) }),
       retryQueue: (id, error, options) => calls.retried.push({ id, options }),
       saveExtraction: (id, patch) => {
         extraction = { ...(extraction || {}), ...patch };
@@ -78,11 +77,11 @@ describe('parser worker', () => {
     };
   }
 
-  it('runs vision then text for live items and completes', async () => {
+  it('runs mandatory text parsing with vision disabled by default', async () => {
     const worker = await loadWorker();
     const result = await worker.processQueueItem(queueItem());
     expect(result.status).toBe('completed');
-    expect(calls.vision).toEqual([{ budgetKind: 'live' }]);
+    expect(calls.vision).toEqual([]);
     expect(calls.llm).toEqual(['live']);
     expect(calls.finalized).toEqual([{ kind: 'live', id: 'queue-1' }]);
   });
@@ -107,10 +106,9 @@ describe('parser worker', () => {
     expect(calls.deferred).toHaveLength(1);
     expect(calls.deferred[0].untilMs).toBe(1234567);
     expect(calls.retried).toEqual([]);
-    expect(calls.dead).toEqual([]);
   });
 
-  it('retries genuine LLM failures and dead-letters after the cap', async () => {
+  it('retries genuine LLM failures indefinitely', async () => {
     llmBehavior = async () => {
       throw new Error('model returned garbage');
     };
@@ -119,15 +117,15 @@ describe('parser worker', () => {
     expect(retry.status).toBe('retry');
     expect(calls.retried[0].options.llm).toBe(true);
 
-    const dead = await worker.processQueueItem(queueItem({ llm_attempt_count: 2 }));
-    expect(dead.status).toBe('dead');
-    expect(calls.dead).toHaveLength(1);
+    const laterRetry = await worker.processQueueItem(queueItem({ llm_attempt_count: 20 }));
+    expect(laterRetry.status).toBe('retry');
+    expect(calls.retried).toHaveLength(2);
   });
 
   it('reuses the cached extraction instead of new LLM calls on finalize retries', async () => {
     extraction = {
       source_text: 'text',
-      llm_json: { title: 'cached' },
+      llm_json: validCachedListing(),
       visual_json: null,
       vision_model: 'none',
     };
@@ -138,3 +136,35 @@ describe('parser worker', () => {
     expect(calls.llm).toEqual([]);
   });
 });
+
+function validCachedListing() {
+  return {
+    title: 'cached',
+    listing_type: 'rental',
+    address: null,
+    availability: 'unknown',
+    available_from: null,
+    size_sqm: null,
+    rooms: null,
+    bedrooms: null,
+    bathrooms: null,
+    floor: null,
+    total_floors: null,
+    building_year: null,
+    property_type: null,
+    condition: null,
+    furnished: null,
+    rent: {
+      cold: null,
+      warm: null,
+      service_charges: null,
+      heating_costs: null,
+      deposit: null,
+      price_type: 'unknown',
+    },
+    energy: { class: null, value_kwh: null, heating_type: null },
+    pets_allowed: null,
+    amenities: [],
+    comments: null,
+  };
+}

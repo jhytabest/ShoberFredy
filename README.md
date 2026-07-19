@@ -18,9 +18,9 @@ Fredy it adds, natively in the source tree:
   self-evaluation, surface GeoJSON for Grafana.
 - **Prometheus exporter** (`yarn market:exporter`): market, scraper-health,
   geocode and prediction metrics on `:9217/metrics`.
-- **Durable listing pipeline**: scheduled full-detail capture, 20 KB WebP media,
-  continuous deterministic + OpenRouter parsing, downstream geocoding/scoring,
-  and an idempotent 15-minute notification outbox.
+- **Durable LLM-only listing pipeline**: scheduled full-detail capture, required
+  audited OpenRouter text extraction, downstream geocoding/scoring, and an
+  idempotent notification outbox. There is no non-LLM extraction path.
 - **Rate-limited historical reparse** (`yarn parsing:backfill enqueue`) plus the
   geocode backfill and legacy database import tools.
 - Token-aware German blacklist matching (`wg`, `befristet`) and SQLite
@@ -196,7 +196,8 @@ Jobs run automatically at the interval you configure (see
 Starting with **V20**, Fredy ships with a built-in **MCP Server **. This allows you to connect Fredy to LLMs (like Claude, ChatGPT, or local models via LM Studio) and query your real estate data using natural language.
 The local LLM can even enrich existing listings by checking the listing online.
 
-For more information on how to set it up and use it, please refer to the [MCP Readme](lib/mcp/README.md).
+Run `yarn mcp:stdio` for a local stdio transport. The authenticated HTTP MCP
+route is served by the main application.
 
 ---
 
@@ -208,20 +209,29 @@ Immoscout has implemented advanced bot detection. In order to work around this, 
 
 Scheduled jobs only discover listings, capture their complete provider detail,
 compress gallery media to WebP files of at most 20,000 bytes, and enqueue that
-evidence in SQLite. A live-first worker extracts every listing with the LLM:
-one vision request over the gallery (live listings) and one structured text
-request against a strict enum-constrained schema with a free-text `comments`
-overflow field. Geocoding, filtering, deduplication, and scoring follow, then
+evidence in SQLite. A durable worker extracts every listing with a required
+structured text LLM request against a strict enum-constrained schema with a
+free-text `comments` overflow field. Vision is disabled by default and, when
+explicitly enabled, is supplemental: it can never block text parsing.
+Geocoding, filtering, deduplication, and scoring follow, then
 an hourly digest notification carries the most relevant structured fields, the
 comments, and both model scores per listing.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —
 matching the OpenRouter free tier); backfill may spend at most
-`FREDY_LLM_BACKFILL_SHARE` (default 0.5) of it while live listings always take
-priority. When the budget or the upstream rate limit is exhausted, queue items
-simply wait for the reset — nothing ever falls back or fails because of rate
-limits.
+`FREDY_LLM_BACKFILL_SHARE` (default 0.8) of it. The persistent weighted queue
+serves one live item and then up to three backfill items, so new listings remain
+prompt while migration cannot starve. When the budget or an upstream rate limit
+is exhausted, queue items wait for reset. All other failures retry indefinitely
+with bounded exponential backoff and jitter; expired leases recover automatically.
+
+Every outbound LLM request and complete response is written to
+`llm_call_audit` before/after the HTTP call. Audit rows contain the model,
+operation, queue/listing identity, sanitized request, raw response, response
+headers, usage, timing, outcome, and error. Authorization is never stored.
+Inline image data is represented by its digest and size so database backups do
+not become media backups.
 
 Native development loads `.env.local`; Docker Compose uses the same file when
 present. Set `OPENROUTER_API_KEY` and `GOOGLE_GEOCODING_API_KEY` there. The model,
@@ -229,8 +239,21 @@ rate, worker, and notification defaults can be overridden with the
 `FREDY_LLM_*`, `FREDY_OPENROUTER_*`, `FREDY_PARSER_*`, and
 `FREDY_NOTIFICATION_*` environment variables.
 
-Historical listings from the four supported providers can be reparsed
-text-only, without opening their listing pages or APIs:
+Important parsing settings:
+
+| Setting                                | Default | Purpose                                          |
+| -------------------------------------- | ------- | ------------------------------------------------ |
+| `FREDY_LLM_VISION_ENABLED`             | `0`     | Set to `1` to add best-effort gallery analysis.  |
+| `FREDY_LLM_DAILY_LIMIT`                | `1000`  | Persistent UTC-day request budget.               |
+| `FREDY_LLM_BACKFILL_SHARE`             | `0.8`   | Maximum share available to historical migration. |
+| `FREDY_PARSER_BACKFILL_BURST`          | `3`     | Backfill calls allowed after each live call.     |
+| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
+
+Migration 29 automatically queues every existing listing for schema-v3 text
+extraction. Base listings remain intact, while legacy attributes and models are
+removed and rebuilt only from validated v3 results. Pending notifications wait
+for that listing's migration. Check or repair the migration without opening
+historical listing pages or APIs:
 
 ```bash
 yarn parsing:backfill enqueue
@@ -238,6 +261,22 @@ yarn parsing:backfill status
 yarn parsing:backfill pause
 yarn parsing:backfill resume
 ```
+
+The status output reports total and migrated listing counts, queue state, LLM
+budget, and audit outcomes. A listing is never finalized or notified without a
+validated text-LLM result.
+
+## Homeserver deployment
+
+`master` publishes `ghcr.io/jhytabest/shoberfredy:master`; the homeserver's
+restricted Fredy deployment pulls that image. The single container serves the
+UI on `9998` and the internal Prometheus exporter on `9217`. Prometheus scrapes
+`fredy:9217` over the private Docker network. Only the SQLite database file
+`/db/listings.db` is backed up; `/db/media` is excluded and intentionally expendable.
+
+The container runs as UID/GID `10001`, with a read-only root filesystem,
+dropped Linux capabilities, and `no-new-privileges`. Memory and PID limits are
+deliberately not configured.
 
 ## 🛡️ Bot Detection & Proxies
 

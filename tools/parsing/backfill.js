@@ -29,8 +29,8 @@ else if (command !== 'status') {
 process.stdout.write(`${JSON.stringify(getBackfillStatus(), null, 2)}\n`);
 
 /**
- * Enqueue a text-only backfill parse for every supported listing that does
- * not yet have an extraction under the current pipeline schema. The original
+ * Enqueue a text-only backfill parse for every listing that does not yet have
+ * current-schema attributes or a current queue row. The original
  * live capture (full page text, embedded data) is reused as parser input
  * whenever it is still available; otherwise the capture is reconstructed
  * from the stored listing row. Enqueueing under the current schema version
@@ -42,10 +42,14 @@ function enqueueAll() {
     .prepare(
       `SELECT l.*
        FROM listings l
-       WHERE l.provider IN ('immoscout', 'immowelt', 'wgGesucht', 'kleinanzeigen')
+       LEFT JOIN listing_attributes a ON a.listing_id = l.id
+       WHERE COALESCE(a.schema_version, 0) < @schemaVersion
          AND NOT EXISTS (
-           SELECT 1 FROM listing_extractions e
-           WHERE e.listing_id = l.id AND e.schema_version >= @schemaVersion AND e.llm_json IS NOT NULL
+           SELECT 1 FROM parsing_queue q
+           WHERE q.listing_id = l.id
+             AND q.queue_kind = 'backfill'
+             AND q.schema_version >= @schemaVersion
+             AND q.status != 'cancelled'
          )
        ORDER BY l.created_at ASC`,
     )

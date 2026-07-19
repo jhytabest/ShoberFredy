@@ -8,7 +8,7 @@ import {
   hedonicDesignVector,
   hedonicDimensions,
   hedonicTermNames,
-  textFeatureFlags,
+  structuredFeatureFlags,
   dot,
   clamp,
   MAX_MONTH_OFFSETS,
@@ -50,8 +50,11 @@ describe('hedonicFeatures', () => {
     expect(capped[monthStart + MAX_MONTH_OFFSETS - 1]).toBe(1);
   });
 
-  it('text feature flags detect German and English terms', () => {
-    const flags = textFeatureFlags('Wohnung mit Balkon', 'frisch saniert, Einbauküche', '');
+  it('feature flags use only structured LLM fields', () => {
+    const flags = structuredFeatureFlags({
+      amenities: ['balcony', 'fitted_kitchen'],
+      condition: 'renovated',
+    });
     expect(flags.balcony).toBe(true);
     expect(flags.renovated).toBe(true);
     expect(flags.fitted_kitchen).toBe(true);

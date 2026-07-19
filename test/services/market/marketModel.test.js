@@ -102,7 +102,7 @@ describe('marketModel orchestrator', () => {
     const families = db.prepare(`SELECT family FROM homeserver_models ORDER BY family`).all();
     expect(families.map((row) => row.family)).toEqual(['ridge']);
     const artifact = JSON.parse(db.prepare(`SELECT artifact_json FROM homeserver_models`).get().artifact_json);
-    expect(artifact.version).toBe('ridge-v4');
+    expect(artifact.version).toBe('ridge-v5');
     expect(artifact.conformal).not.toBeNull();
     db.close();
   });

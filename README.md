@@ -209,15 +209,24 @@ Immoscout has implemented advanced bot detection. In order to work around this, 
 ## Durable parsing pipeline
 
 Scheduled jobs only paginate provider result lists and put each discovery card
-in a durable detail-fetch queue. Stable provider ID or canonical URL is the
-first dedupe key. A single continuous detail worker drains that queue in FIFO
-order independently of future discovery runs; failures move aside with durable
-backoff, so another provider can continue. Exact evidence versions are
-deduplicated before they enter the parsing queue. Provider pages marked
-`gelöscht` or `reserviert` are retained as inactive audit evidence and never
-enter parsing. Active detail evidence is conservatively cleaned, while the
-untouched raw text is retained for audit. Gallery media may be compressed for
-display, but media is not part of database backups.
+in a durable detail-fetch queue. Stable provider ID and canonical URL form the
+first conservative dedupe layer. A single continuous detail worker drains that
+queue in FIFO order independently of future discovery runs; failures move aside
+with durable backoff, so another provider can continue. After detail capture, a
+small deterministic classifier deduplicates only strong exact evidence and
+applies the job blacklist to the complete detail text. Pre-LLM blacklist matches
+are stored as soft-deleted audit listings and do not spend an LLM call. Provider
+pages marked `gelöscht` or `reserviert` are retained as inactive audit evidence
+and never enter parsing. Active detail evidence is conservatively cleaned,
+while the untouched raw text is retained for audit. Gallery media may be
+compressed for display, but media is not part of database backups.
+
+Every raw source has its own `listing_sources` record and immutable
+discovery/detail observations. Dedupe never discards a source: it points the
+source at its representative listing and merges every URL into
+`listings.source_urls_json`. `pipeline_audit_events` records discovery/detail
+merges, blacklist decisions, post-LLM filters, final merges, scores, and
+notification outcomes.
 
 Stored active listings receive one provider reachability check at startup and
 then daily at 01:00, for at most seven days. A Kleinanzeigen page containing
@@ -232,16 +241,20 @@ overflow field. The LLM receives detail-page/API evidence only. Discovery-card
 title, address, price, size, and rooms are never fallbacks after LLM extraction;
 unknown values remain null/unknown. Vision is disabled by default and, when
 explicitly enabled, is supplemental: it can never block text parsing. Validated
-LLM fields then drive geocoding, filtering, semantic deduplication, storage, and
-the market model. Rating and notification each use their own durable queue, so a
-process restart cannot strand an accepted listing.
+LLM fields then drive geocoding, a second blacklist/filter decision, final
+semantic deduplication, storage, and the market model. Rating and notification
+each use their own durable queue, so a process restart cannot strand an accepted
+listing. Rating completion inserts the durable notification delivery and wakes
+the dispatcher immediately. Notification retries schedule one timer for their
+exact persisted due time; notifications are never polled.
 
-Discovery rejects only malformed cards without a stable ID/link; user filters
-never discard cards before their detail page and required LLM extraction.
-Afterward, blacklist visibility uses the LLM title and retained detail evidence,
-specification filters use only LLM price/size/rooms, and spatial filters use the
-geocoded LLM address. Rejected listings remain stored with `hidden_reason` for
-audit but cannot reach notifications.
+Discovery rejects only malformed cards without a stable ID/link. After details,
+the blacklist is applied to retained page evidence before LLM parsing. After the
+required LLM extraction, the blacklist runs again against the LLM title and
+retained detail evidence; specification filters use only LLM price/size/rooms,
+and spatial filters use the geocoded LLM address. Deterministic pre-LLM values
+never overwrite or supplement LLM fields. Rejected listings remain stored with
+`hidden_reason` for audit but cannot trigger notifications.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —
@@ -261,9 +274,8 @@ not become media backups.
 
 Native development loads `.env.local`; Docker Compose uses the same file when
 present. Set `OPENROUTER_API_KEY` and `GOOGLE_GEOCODING_API_KEY` there. The model,
-rate, worker, and notification defaults can be overridden with the
-`FREDY_LLM_*`, `FREDY_OPENROUTER_*`, `FREDY_PARSER_*`, and
-`FREDY_NOTIFICATION_*` environment variables.
+rate, and worker defaults can be overridden with the `FREDY_LLM_*`,
+`FREDY_OPENROUTER_*`, and `FREDY_PARSER_*` environment variables.
 
 Important parsing settings:
 
@@ -276,7 +288,6 @@ Important parsing settings:
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
 | `FREDY_DISCOVERY_MAX_PAGES`            | provider| Result pages visited per scheduled provider run. |
 | `FREDY_DETAIL_FETCH_IDLE_POLL_MS`      | `1000`  | Detail worker delay when no card is due.          |
-| `FREDY_NOTIFICATION_INTERVAL_MS`       | `5000`  | Notification outbox polling interval.             |
 
 Migration 30 automatically queues every existing listing for schema-v4 text
 extraction using the best retained detail capture, falling back to its stored

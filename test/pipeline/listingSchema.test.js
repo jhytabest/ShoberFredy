@@ -88,6 +88,16 @@ describe('listing LLM structure', () => {
     expect(validateListing(orphanDate).errors.join('\n')).toContain('must be null unless availability');
   });
 
+  it('rejects impossible calendar dates that Date.parse would normalize', () => {
+    const impossible = { ...validListing, availability: 'date', available_from: '2026-02-31' };
+    expect(validateListing(impossible).errors.join('\n')).toContain('ISO date');
+
+    const leapDay = { ...validListing, availability: 'date', available_from: '2028-02-29' };
+    expect(validateListing(leapDay)).toEqual({ valid: true, errors: [] });
+    const nonLeapDay = { ...validListing, availability: 'date', available_from: '2027-02-29' };
+    expect(validateListing(nonLeapDay).errors.join('\n')).toContain('ISO date');
+  });
+
   it('rejects out-of-range numbers and off-vocabulary amenities', () => {
     const outOfRange = structuredClone(validListing);
     outOfRange.building_year = 24;

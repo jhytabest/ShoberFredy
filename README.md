@@ -208,10 +208,12 @@ Immoscout has implemented advanced bot detection. In order to work around this, 
 
 ## Durable parsing pipeline
 
-Scheduled jobs paginate provider result lists and put each discovery card in a
-durable detail-fetch queue. Stable provider ID or canonical URL is the first
-dedupe key. Detail pages are then fetched separately and exact evidence versions
-are deduplicated before they enter the parsing queue. Provider pages marked
+Scheduled jobs only paginate provider result lists and put each discovery card
+in a durable detail-fetch queue. Stable provider ID or canonical URL is the
+first dedupe key. A single continuous detail worker drains that queue in FIFO
+order independently of future discovery runs; failures move aside with durable
+backoff, so another provider can continue. Exact evidence versions are
+deduplicated before they enter the parsing queue. Provider pages marked
 `gelöscht` or `reserviert` are retained as inactive audit evidence and never
 enter parsing. Active detail evidence is conservatively cleaned, while the
 untouched raw text is retained for audit. Gallery media may be compressed for
@@ -233,6 +235,13 @@ explicitly enabled, is supplemental: it can never block text parsing. Validated
 LLM fields then drive geocoding, filtering, semantic deduplication, storage, and
 the market model. Rating and notification each use their own durable queue, so a
 process restart cannot strand an accepted listing.
+
+Discovery rejects only malformed cards without a stable ID/link; user filters
+never discard cards before their detail page and required LLM extraction.
+Afterward, blacklist visibility uses the LLM title and retained detail evidence,
+specification filters use only LLM price/size/rooms, and spatial filters use the
+geocoded LLM address. Rejected listings remain stored with `hidden_reason` for
+audit but cannot reach notifications.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —
@@ -266,7 +275,8 @@ Important parsing settings:
 | `FREDY_PARSER_BACKFILL_BURST`          | `3`     | Backfill calls allowed after each live call.     |
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
 | `FREDY_DISCOVERY_MAX_PAGES`            | provider| Result pages visited per scheduled provider run. |
-| `FREDY_DETAIL_FETCH_BATCH_SIZE`        | `25`    | Detail pages fetched per provider invocation.    |
+| `FREDY_DETAIL_FETCH_IDLE_POLL_MS`      | `1000`  | Detail worker delay when no card is due.          |
+| `FREDY_NOTIFICATION_INTERVAL_MS`       | `5000`  | Notification outbox polling interval.             |
 
 Migration 30 automatically queues every existing listing for schema-v4 text
 extraction using the best retained detail capture, falling back to its stored

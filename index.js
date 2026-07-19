@@ -22,6 +22,7 @@ import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 import { markInterruptedLlmAudits } from './lib/services/pipeline/llmAuditStorage.js';
+import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
@@ -128,6 +129,7 @@ logger.info(`Started Fredy successfully. Ui can be accessed via http://localhost
 
 // Independent durable consumers start before the scrape producer. Neither is
 // awaited by scheduled scrape runs.
+startDetailFetchWorker({ providers });
 startParserWorker();
 startRatingWorker();
 startNotificationDispatcher();

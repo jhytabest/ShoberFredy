@@ -82,7 +82,7 @@
     "@sendgrid/mail": "8.1.6",
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "@vitejs/plugin-react": "6.0.3",
-    "adm-zip": "^0.5.18",
+    "adm-zip": "^0.6.0",
     "better-sqlite3": "^12.11.1",
     "chart.js": "^4.5.1",
     "cheerio": "^1.2.0",

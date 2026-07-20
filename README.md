@@ -220,7 +220,8 @@ strict card-plus-image identity and applies the job blacklist and specification
 limits to the complete detail evidence. Pre-LLM filter matches are stored as
 soft-deleted audit listings and do not spend an LLM call. CAPTCHA and bot
 challenge pages are retried as acquisition failures and can never participate
-in dedupe. Provider
+in dedupe. Query-based WG fallback links retain only their `asset_id`; sort and
+list-context parameters cannot create new source identities. Provider
 pages marked `gelöscht` or `reserviert` are retained as inactive audit evidence
 and never enter parsing. Active detail evidence is conservatively cleaned,
 while the untouched raw text is retained for audit. Gallery media may be

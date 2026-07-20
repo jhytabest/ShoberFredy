@@ -11,8 +11,8 @@ Fredy it adds, natively in the source tree:
 - **Durable market rating**: every LLM-parsed listing is queued and priced
   against a persisted hedonic + spatial-residual model; notifications carry a
   `Model: … €/m² vs fair … €/m²` metrics line.
-- **Cross-portal dedupe**: a flat already notified from another portal/job in
-  the last 7 days is soft-hidden instead of re-notified.
+- **Cross-portal dedupe**: a flat already accepted by the same search job in
+  the last 7 days absorbs the new portal source instead of being re-notified.
 - **Market model daemon** (`yarn market:model:daemon`): geo-surface-v3 robust
   ridge regression + adaptive kernel residual field, with holdout/spatial-CV
   self-evaluation, surface GeoJSON for Grafana.
@@ -213,9 +213,12 @@ in a durable detail-fetch queue. Stable provider ID and canonical URL form the
 first conservative dedupe layer. A single continuous detail worker drains that
 queue in FIFO order independently of future discovery runs; failures move aside
 with durable backoff, so another provider can continue. After detail capture, a
-small deterministic classifier deduplicates only strong exact evidence and
-applies the job blacklist to the complete detail text. Pre-LLM blacklist matches
-are stored as soft-deleted audit listings and do not spend an LLM call. Provider
+small deterministic classifier deduplicates only identity-preserving URLs or a
+strict card-plus-image identity and applies the job blacklist and specification
+limits to the complete detail evidence. Pre-LLM filter matches are stored as
+soft-deleted audit listings and do not spend an LLM call. CAPTCHA and bot
+challenge pages are retried as acquisition failures and can never participate
+in dedupe. Provider
 pages marked `gelöscht` or `reserviert` are retained as inactive audit evidence
 and never enter parsing. Active detail evidence is conservatively cleaned,
 while the untouched raw text is retained for audit. Gallery media may be
@@ -242,10 +245,12 @@ title, address, price, size, and rooms are never fallbacks after LLM extraction;
 unknown values remain null/unknown. Vision is disabled by default and, when
 explicitly enabled, is supplemental: it can never block text parsing. Validated
 LLM fields then drive geocoding, a second blacklist/filter decision, final
-semantic deduplication, storage, and the market model. Rating and notification
-each use their own durable queue, so a process restart cannot strand an accepted
-listing. Rating completion inserts the durable notification delivery and wakes
-the dispatcher immediately. Notification retries schedule one timer for their
+semantic deduplication within the same job, storage, and the market model.
+Rating and notification each use their own durable queue, so a process restart
+cannot strand an accepted listing. A temporarily unavailable market model does not delay notification:
+the listing remains in `waiting_model` and is requeued after the next successful
+model training. Rating completion inserts the durable notification delivery and
+wakes the dispatcher immediately. Notification retries schedule one timer for their
 exact persisted due time; notifications are never polled.
 
 Discovery rejects only malformed cards without a stable ID/link. After details,
@@ -254,7 +259,9 @@ required LLM extraction, the blacklist runs again against the LLM title and
 retained detail evidence; specification filters use only LLM price/size/rooms,
 and spatial filters use the geocoded LLM address. Deterministic pre-LLM values
 never overwrite or supplement LLM fields. Rejected listings remain stored with
-`hidden_reason` for audit but cannot trigger notifications.
+`hidden_reason` plus every decision in `filter_reasons_json` for audit. Filtering
+is terminal: detail, LLM, rating, and pending notification work is cancelled,
+while the listing, all source links, raw observations, and audit events remain.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —

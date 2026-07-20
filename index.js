@@ -23,6 +23,7 @@ import { startNotificationDispatcher } from './lib/services/pipeline/notificatio
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 import { markInterruptedLlmAudits } from './lib/services/pipeline/llmAuditStorage.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
+import { reconcileTerminalPipeline } from './lib/services/pipeline/pipelineReconciler.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
@@ -50,6 +51,7 @@ if (!isConfigAccessible) {
 
 // Run DB migrations once at startup and block until finished
 await runMigrations();
+reconcileTerminalPipeline();
 const interruptedAudits = markInterruptedLlmAudits();
 if (interruptedAudits)
   logger.warn(`Closed ${interruptedAudits} interrupted LLM audit call(s) from the previous process.`);

@@ -212,7 +212,9 @@ Scheduled jobs only paginate provider result lists and put each discovery card
 in a durable detail-fetch queue. Stable provider ID and canonical URL form the
 first conservative dedupe layer. A single continuous detail worker drains that
 queue in FIFO order independently of future discovery runs; failures move aside
-with durable backoff, so another provider can continue. After detail capture, a
+with durable backoff, so another provider can continue. A card that already
+proves a blacklist/specification failure is audited and stopped immediately
+after discovery dedupe, without waiting behind detail fetches. After detail capture, a
 small deterministic classifier deduplicates only identity-preserving URLs or a
 strict card-plus-image identity and applies the job blacklist and specification
 limits to the complete detail evidence. Pre-LLM filter matches are stored as

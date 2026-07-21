@@ -12,6 +12,7 @@ import { initTrackerCron } from './lib/services/crons/tracker-cron.js';
 import logger from './lib/services/logger.js';
 import { reloadEnabledFromSettings } from './lib/services/debug/debugLogStorage.js';
 import { initActiveCheckerCron } from './lib/services/crons/listing-alive-cron.js';
+import { initDbMaintenanceCron } from './lib/services/crons/db-maintenance-cron.js';
 import { getSettings } from './lib/services/storage/settingsStorage.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
@@ -91,6 +92,9 @@ ensureDemoUserExists();
 await initTrackerCron();
 //do not wait for this to finish, let it run in the background
 initActiveCheckerCron();
+// Nightly SQLite maintenance: checkpoint the WAL and bound the retained
+// audit/queue payload growth (see db-maintenance-cron.js).
+initDbMaintenanceCron();
 // No geocoding cron: the durable parser geocodes after capture, while the
 // separate geocode/backfill CLIs remain available for maintenance.
 

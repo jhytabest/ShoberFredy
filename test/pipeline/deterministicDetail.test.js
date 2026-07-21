@@ -114,4 +114,23 @@ describe('extractDeterministicDetail', () => {
     const det = extractDeterministicDetail(capture, {});
     expect(det.price.value).toBeNull();
   });
+
+  it('reads structured size and address from the Immowelt embedded classified payload', () => {
+    const capture = captureHtmlString(
+      { id: 'iw', link: 'https://www.immowelt.de/expose/iw' },
+      readFixture('immowelt_detail.html'),
+      {
+        provider: 'immowelt',
+        rootSelectors: ['main', 'body'],
+        embeddedSelectors: ['#__UFRN_LIFECYCLE_SERVERREQUEST__', '#__NEXT_DATA__'],
+      },
+    );
+    const det = extractDeterministicDetail(capture, {});
+    expect(det.size.value).toBe(136); // Wohnflaeche, not the Wohnflaeche_Range bucket
+    expect(det.address.value).toContain('Sassenberg');
+    // This fixture is a sale (Vermarktungsart SELL), so the Kaufpreis must not
+    // become a rent price for the maxPrice check.
+    expect(det.price.value).toBeNull();
+    expect(det.coords).toBeNull(); // immowelt exposes an area polygon, not a point
+  });
 });

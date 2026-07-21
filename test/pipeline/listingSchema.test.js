@@ -41,6 +41,16 @@ describe('listing LLM structure', () => {
     expect(validateListing(validListing)).toEqual({ valid: true, errors: [] });
   });
 
+  it('treats summary as optional: valid with it, and valid without it (v4 cache stays valid)', () => {
+    expect(validateListing({ ...validListing, summary: 'Kurze Zusammenfassung.' })).toEqual({
+      valid: true,
+      errors: [],
+    });
+    const withoutSummary = { ...validListing };
+    delete withoutSummary.summary;
+    expect(validateListing(withoutSummary)).toEqual({ valid: true, errors: [] });
+  });
+
   it('accepts null for every optional fact', () => {
     const minimal = {
       ...validListing,

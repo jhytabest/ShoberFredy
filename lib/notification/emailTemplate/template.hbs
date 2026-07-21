@@ -75,22 +75,23 @@
                                 <tr><td class="sp-8"></td></tr>
                                 <tr>
                                     <td style="padding:0 18px;">
-                                        <table role="presentation" width="100%">
+                                        <p class="meta"><strong>Address</strong><br/>{{#if this.address}}{{this.address}}{{else}}unknown{{/if}}</p>
+                                        {{#if this.facts.length}}
+                                        <table role="presentation" width="100%" style="margin-top:8px;">
+                                            {{#each this.facts}}
                                             <tr>
-                                                <td class="stack" style="vertical-align:top; width:50%; padding-right:8px;">
-                                                    <p class="meta"><strong>Price</strong><br/>{{#if this.price}}{{this.price}}{{else}}unknown{{/if}}</p>
-                                                </td>
-                                                <td class="stack" style="vertical-align:top; width:50%; padding-left:8px;">
-                                                    <p class="meta"><strong>Size</strong><br/>{{#if this.size}}{{this.size}}{{else}}unknown{{/if}}</p>
-                                                </td>
+                                                <td class="meta" style="width:34%; color:#9f9f9f; vertical-align:top; padding:2px 0;">{{this.label}}</td>
+                                                <td class="meta" style="vertical-align:top; padding:2px 0;">{{this.value}}</td>
                                             </tr>
-                                            <tr><td class="sp-8"></td><td class="sp-8"></td></tr>
-                                            <tr>
-                                                <td colspan="2">
-                                                    <p class="meta"><strong>Address</strong><br/>{{#if this.address}}{{this.address}}{{else}}unknown{{/if}}</p>
-                                                </td>
-                                            </tr>
+                                            {{/each}}
                                         </table>
+                                        {{/if}}
+                                        {{#if this.summary}}
+                                        <p class="p" style="margin-top:10px;">{{this.summary}}</p>
+                                        {{/if}}
+                                        {{#if this.scoreLine}}
+                                        <p class="meta" style="margin-top:8px; color:#00dc73;">{{this.scoreLine}}</p>
+                                        {{/if}}
                                     </td>
                                 </tr>
                                 <tr><td class="sp-16"></td></tr>

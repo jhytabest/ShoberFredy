@@ -98,6 +98,8 @@ describe('notification dispatcher', () => {
         pets_allowed: 1,
         amenities_json: JSON.stringify(['balcony', 'elevator']),
         comments: 'Tausch nur gegen 3-Zimmer in Kreuzberg.',
+        summary: 'Helle Altbauwohnung in guter Lage, fairer Preis, nur gegen Tausch.',
+        image_url: 'https://img.example/header.jpg',
       },
     ];
     scores = new Map([['listing-1', { actualPricePerSqm: 20, priceType: 'cold', swap: false, models: {} }]]);
@@ -109,11 +111,17 @@ describe('notification dispatcher', () => {
     await dispatcher.dispatchDueNotifications();
     expect(calls.sent).toEqual([['delivery-1']]);
     const [listing] = calls.listings[0];
-    expect(listing.address).toContain('rental');
-    expect(listing.address).toContain('cold 900 €');
-    expect(listing.address).toContain('available 2026-09-01');
-    expect(listing.address).toContain('balcony, elevator');
-    expect(listing.address).toContain('Tausch nur gegen 3-Zimmer in Kreuzberg.');
+    // Address stays clean; details are first-class structured fields now.
+    expect(listing.address).toBe('Teststraße 1');
+    expect(listing.hasImage).toBe(true);
+    expect(listing.image).toBe('https://img.example/header.jpg');
+    expect(listing.summary).toBe('Helle Altbauwohnung in guter Lage, fairer Preis, nur gegen Tausch.');
+    const facts = Object.fromEntries(listing.facts.map((fact) => [fact.label, fact.value]));
+    expect(facts.Miete).toContain('kalt 900 €');
+    expect(facts.Miete).toContain('warm 1.150 €');
+    expect(facts.Typ).toBe('Wohnung');
+    expect(facts.Verfügbar).toBe('ab 2026-09-01');
+    expect(facts.Ausstattung).toBe('Balkon, Aufzug');
     expect(listing.marketScore).toEqual(scores.get('listing-1'));
   });
 });

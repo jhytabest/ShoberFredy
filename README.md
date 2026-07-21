@@ -48,13 +48,6 @@ Apache-2.0 with Commons Clause and Attribution/Naming Clause.
   <a href="https://fredy-demo.orange-coding.net/" target="_blank">Demo</a>
 </p>
 
-<p align="center">
-  <img src="https://github.com/orangecoding/fredy/actions/workflows/test.yml/badge.svg" alt="Tests" />
-  <img src="https://github.com/orangecoding/fredy/actions/workflows/docker.yml/badge.svg" alt="Docker" />
-  <img src="https://github.com/orangecoding/fredy/actions/workflows/check_source.yml/badge.svg" alt="Source" />
-  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Forangecoding%2Ffredy%2Ffredy&query=%24.downloadCount&label=Docker%20Pulls" alt="Docker Pulls" />
-</p>
-
 # Fredy 🏡 - Your Self-Hosted Real Estate Finder for Germany
 
 Finding an apartment or house in Germany can be stressful and
@@ -298,6 +291,18 @@ Important parsing settings:
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
 | `FREDY_DISCOVERY_MAX_PAGES`            | provider| Result pages visited per scheduled provider run. |
 | `FREDY_DETAIL_FETCH_IDLE_POLL_MS`      | `1000`  | Detail worker delay when no card is due.          |
+| `FREDY_PRELLM_AREA_MIN_PRECISION`      | `house,street` | Geocode precisions confident enough to reject a listing on the area filter before the LLM call. Coarser precisions never reject (fail open). |
+| `FREDY_LLM_MAX_TEXT_CHARS`             | `24000` | Cap on visible-text evidence sent to the LLM.    |
+| `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000` | Cap on embedded-JSON evidence sent to the LLM.   |
+| `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000` | Global defer window when the provider returns a transient upstream-capacity error (HTTP-200-wrapped 5xx). |
+| `FREDY_DB_PAYLOAD_RETENTION_DAYS`      | `30`    | Age after which the nightly maintenance cron nulls heavy payloads (capture JSON, LLM request/response bodies) on terminal rows. |
+| `FREDY_DB_VACUUM`                      | `0`     | Set to `1` to also `VACUUM` (exclusive lock) during nightly maintenance. |
+
+Before the required LLM extraction, a deterministic tier mines price, size,
+rooms, address and (ImmoScout) rooftop coordinates from the captured detail
+evidence and applies the blacklist, specification and spatial filters, so a
+listing that will be rejected anyway never spends an LLM call. Deterministic
+values only gate and dedupe — they never become canonical listing facts.
 
 Migration 30 automatically queues every existing listing for schema-v4 text
 extraction using the best retained detail capture, falling back to its stored
@@ -330,6 +335,15 @@ UI on `9998` and the internal Prometheus exporter on `9217`. Prometheus scrapes
 The container runs as UID/GID `10001`, with a read-only root filesystem,
 dropped Linux capabilities, and `no-new-privileges`. Memory and PID limits are
 deliberately not configured.
+
+A nightly in-process maintenance task (02:30) checkpoints the WAL and bounds
+the retained audit/queue payload growth (see
+`FREDY_DB_PAYLOAD_RETENTION_DAYS`). Because the CI image is rebuilt on every
+push, the host should also prune unused Docker images and build cache
+periodically (e.g. a weekly `docker image prune -af` + `docker builder prune
+-af` systemd timer) so old image layers don't fill the root disk, and alert on
+low free space for both the root and `/srv/data` volumes (the raw
+`node_filesystem_avail_bytes` metric is already scraped).
 
 ## 🛡️ Bot Detection & Proxies
 

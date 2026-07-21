@@ -46,7 +46,7 @@ export default [
 
   // Standalone CLIs/daemons report via stdout by design.
   {
-    files: ['tools/market/**/*.js', 'tools/migrate/**/*.js'],
+    files: ['tools/market/**/*.js', 'tools/migrate/**/*.js', 'tools/pipeline/**/*.js'],
     rules: {
       'no-console': 'off',
     },

@@ -74,4 +74,23 @@ describe('openRouterToolCall rate-limit handling', () => {
     await expect(call).rejects.toMatchObject({ name: 'LlmBudgetExhaustedError' });
     expect(budget.budgetStatus().blockedUntil).toBeGreaterThanOrEqual(resetMs);
   });
+
+  it('defers (does not hard-fail) on an HTTP-200-wrapped upstream capacity error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () =>
+          '{"error":{"message":"Upstream error from Nvidia: ResourceExhausted: Worker local total request limit reached (32/32)","code":502}}',
+      })),
+    );
+    const call = client.openRouterToolCall({ model: 'm', messages: [], tool: TOOL, budgetKind: 'live' });
+    await expect(call).rejects.toMatchObject({ name: 'LlmBudgetExhaustedError' });
+    // The whole pipeline is briefly blocked so queued items wait for capacity
+    // instead of burning retries+budget.
+    expect(budget.budgetStatus().blockedUntil).toBeGreaterThan(Date.now());
+    expect(budget.canSpend('live').ok).toBe(false);
+  });
 });

@@ -18,7 +18,7 @@ import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteCo
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
 import { startMetricsExporter } from './lib/services/market/metricsExporter.js';
-import { initMarketModel, runMarketModelOnce, marketModelIntervalSeconds } from './lib/services/market/marketModel.js';
+import { startMarketModelScheduler } from './lib/services/market/marketModelScheduler.js';
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
@@ -116,19 +116,7 @@ try {
 
 if (process.env.FREDY_MARKET_MODEL_INTERVAL_SECONDS !== '0') {
   try {
-    await initMarketModel();
-    const retrain = () => {
-      // Async: the GBM half trains in a short-lived Python child process,
-      // and either family failing keeps its previous artifact serving.
-      runMarketModelOnce().catch((error) =>
-        logger.error('Market model retrain failed; keeping previous model state', error),
-      );
-    };
-    // First retrain shortly after boot (off the critical startup path), then
-    // on the configured interval (default daily).
-    setTimeout(retrain, 60 * 1000);
-    setInterval(retrain, marketModelIntervalSeconds() * 1000);
-    logger.info(`Market model retrain scheduled every ${marketModelIntervalSeconds()}s`);
+    await startMarketModelScheduler();
   } catch (error) {
     logger.error('Failed to initialize market model; continuing without retrains', error);
   }

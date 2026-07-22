@@ -52,6 +52,9 @@ if (!isConfigAccessible) {
 
 // Run DB migrations once at startup and block until finished
 await runMigrations();
+if (process.exitCode) {
+  throw new Error('Database migrations failed; refusing to start against an incomplete schema.');
+}
 reconcileTerminalPipeline();
 const interruptedAudits = markInterruptedLlmAudits();
 if (interruptedAudits)

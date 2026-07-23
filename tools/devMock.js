@@ -25,9 +25,7 @@ const jobs = [
         url: 'https://www.immobilienscout24.de/Suche/S-T/Wohnung-Miete/Bayern/Muenchen',
       },
     ],
-    notificationAdapter: [
-      { id: 'telegram', name: 'Telegram', fields: { token: 'mock-token', chatId: '123456' } },
-    ],
+    notificationAdapter: [{ id: 'telegram', name: 'Telegram', fields: { token: 'mock-token', chatId: '123456' } }],
     specFilter: { maxPrice: 1500, minSize: 50 },
     numberOfFoundListings: 2,
   },
@@ -38,9 +36,7 @@ const jobs = [
     running: false,
     blacklist: ['keller', 'EG'],
     provider: [{ id: 'immo', name: 'Immowelt', url: 'https://www.immowelt.de/suche/berlin/wohnungen/mieten' }],
-    notificationAdapter: [
-      { id: 'telegram', name: 'Telegram', fields: { token: 'mock-token', chatId: '123456' } },
-    ],
+    notificationAdapter: [{ id: 'telegram', name: 'Telegram', fields: { token: 'mock-token', chatId: '123456' } }],
     specFilter: {},
     numberOfFoundListings: 2,
   },

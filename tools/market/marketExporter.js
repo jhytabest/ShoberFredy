@@ -18,3 +18,4 @@ const server = await startMetricsExporter();
 if (!server) {
   throw new Error('Metrics exporter is disabled (FREDY_MARKET_EXPORTER_PORT=0)');
 }
+process.send?.({ type: 'market_metrics_ready', port: server.address().port });

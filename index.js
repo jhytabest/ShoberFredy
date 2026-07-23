@@ -17,7 +17,7 @@ import { getSettings } from './lib/services/storage/settingsStorage.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
-import { startMetricsExporter } from './lib/services/market/metricsExporter.js';
+import { startMetricsExporterProcess } from './lib/services/market/metricsExporterSupervisor.js';
 import { startMarketModelScheduler } from './lib/services/market/marketModelScheduler.js';
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
@@ -101,15 +101,12 @@ initDbMaintenanceCron();
 // No geocoding cron: the durable parser geocodes after capture, while the
 // separate geocode/backfill CLIs remain available for maintenance.
 
-// Market services (single-container mode): Prometheus exporter on its own
-// port and the periodic market model retrain, both in-process.
+// Market services: the Prometheus exporter and CPU-heavy retraining run in
+// child processes so observability and model work cannot block the API loop.
 // FREDY_MARKET_EXPORTER_PORT=0 / FREDY_MARKET_MODEL_INTERVAL_SECONDS=0
 // disable them (e.g. when running the standalone CLI daemons instead).
 try {
-  const metricsServer = await startMetricsExporter();
-  if (metricsServer) {
-    logger.info(`Market metrics exporter listening on :${metricsServer.address().port}/metrics`);
-  }
+  await startMetricsExporterProcess();
 } catch (error) {
   logger.error('Failed to start market metrics exporter; continuing without it', error);
 }

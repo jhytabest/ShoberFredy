@@ -11,8 +11,6 @@
 import http from 'node:http';
 const now = Date.now();
 
-const users = [{ id: 1, username: 'admin', isAdmin: true, lastLogin: now, numberOfJobs: 2, mcpToken: 'tok_abc123' }];
-
 const jobs = [
   {
     id: 'job1',
@@ -27,10 +25,11 @@ const jobs = [
         url: 'https://www.immobilienscout24.de/Suche/S-T/Wohnung-Miete/Bayern/Muenchen',
       },
     ],
-    notificationAdapter: [],
+    notificationAdapter: [
+      { id: 'telegram', name: 'Telegram', fields: { token: 'mock-token', chatId: '123456' } },
+    ],
     specFilter: { maxPrice: 1500, minSize: 50 },
     numberOfFoundListings: 2,
-    isOnlyShared: false,
   },
   {
     id: 'job2',
@@ -39,10 +38,11 @@ const jobs = [
     running: false,
     blacklist: ['keller', 'EG'],
     provider: [{ id: 'immo', name: 'Immowelt', url: 'https://www.immowelt.de/suche/berlin/wohnungen/mieten' }],
-    notificationAdapter: [],
+    notificationAdapter: [
+      { id: 'telegram', name: 'Telegram', fields: { token: 'mock-token', chatId: '123456' } },
+    ],
     specFilter: {},
     numberOfFoundListings: 2,
-    isOnlyShared: false,
   },
 ];
 
@@ -58,7 +58,6 @@ const listings = [
     image_url: null,
     link: 'https://example.com/l1',
     is_active: true,
-    isWatched: 0,
     jobId: 'job1',
     job_name: 'Munich Apartments',
     size: 72,
@@ -78,7 +77,6 @@ const listings = [
     image_url: null,
     link: 'https://example.com/l2',
     is_active: true,
-    isWatched: 1,
     jobId: 'job1',
     job_name: 'Munich Apartments',
     size: 55,
@@ -98,7 +96,6 @@ const listings = [
     image_url: null,
     link: 'https://example.com/l3',
     is_active: false,
-    isWatched: 0,
     jobId: 'job2',
     job_name: 'Berlin Rentals',
     size: 65,
@@ -118,7 +115,6 @@ const listings = [
     image_url: null,
     link: 'https://example.com/l4',
     is_active: true,
-    isWatched: 1,
     jobId: 'job2',
     job_name: 'Berlin Rentals',
     size: 95,
@@ -139,23 +135,25 @@ const dashboard = {
 };
 
 const routes = {
-  'GET /api/login/user': { userId: 1, username: 'admin', isAdmin: true },
-  'GET /api/admin/users': users,
+  'GET /api/login/user': { userId: 1 },
+  'GET /api/account': { username: 'admin' },
   'GET /api/jobs/provider': [
     { id: 'immoscout', name: 'ImmobilienScout24', baseUrl: 'https://www.immobilienscout24.de' },
     { id: 'immo', name: 'Immowelt', baseUrl: 'https://www.immowelt.de' },
   ],
   'GET /api/jobs': jobs,
-  'GET /api/jobs/shareableUserList': [],
-  'GET /api/jobs/notificationAdapter': [],
-  'GET /api/admin/generalSettings': { demoMode: false, analyticsEnabled: true, interval: 30 },
+  'GET /api/admin/generalSettings': { interval: 30 },
   'GET /api/user/settings': {},
-  'GET /api/version': { newVersion: null },
-  'GET /api/tracking/trackingPois': [],
   'GET /api/dashboard': dashboard,
-  'GET /api/demo': { demoMode: false },
-  'POST /api/user/settings/news-hash': {},
   'POST /api/user/settings/listing-deletion-preference': {},
+  'GET /health': {
+    status: 'ok',
+    checks: {
+      database: { ok: true },
+      schema: { ok: true },
+      workers: { ok: true },
+    },
+  },
 };
 
 const server = http.createServer((req, res) => {
@@ -184,22 +182,8 @@ const server = http.createServer((req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
 
-  const userMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
-  if (req.method === 'GET' && userMatch) {
-    const user = users.find((u) => u.id === parseInt(userMatch[1]));
-    res.writeHead(user ? 200 : 404);
-    res.end(JSON.stringify(user || { message: 'Not found' }));
-    return;
-  }
-
   const listingMatch = path.match(/^\/api\/listings\/([^/]+)$/);
-  if (
-    req.method === 'GET' &&
-    listingMatch &&
-    !path.includes('/table') &&
-    !path.includes('/map') &&
-    !path.includes('/watch')
-  ) {
+  if (req.method === 'GET' && listingMatch && !path.includes('/table') && !path.includes('/map')) {
     const listing = listings.find((l) => l.id === listingMatch[1]);
     res.writeHead(listing ? 200 : 404);
     res.end(JSON.stringify(listing || { message: 'Not found' }));

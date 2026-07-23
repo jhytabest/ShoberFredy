@@ -24,7 +24,6 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui-19';
 import {
-  IconAlertTriangle,
   IconDelete,
   IconDescend2,
   IconEdit,
@@ -303,13 +302,6 @@ const JobGrid = () => {
                     </Title>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    {job.isOnlyShared && (
-                      <Popover content={getPopoverContent(t('jobs.cardSharedReadOnly'))}>
-                        <div>
-                          <IconAlertTriangle style={{ color: 'rgba(var(--semi-yellow-7), 1)' }} />
-                        </div>
-                      </Popover>
-                    )}
                     {job.running && (
                       <Tag color="green" variant="light" size="small">
                         {t('jobs.cardRunning')}
@@ -334,7 +326,7 @@ const JobGrid = () => {
                   <div className="jobGrid__card__stat jobGrid__card__stat--purple">
                     <span className="jobGrid__card__stat__number">{job.notificationAdapter?.length || 0}</span>
                     <span className="jobGrid__card__stat__label">
-                      <IconBell size="small" /> {t('jobs.cardAdapters')}
+                      <IconBell size="small" /> {t('jobs.cardTelegram')}
                     </span>
                   </div>
                 </div>
@@ -346,7 +338,6 @@ const JobGrid = () => {
                     <Switch
                       onChange={(checked) => onJobStatusChanged(job.id, checked)}
                       checked={job.enabled}
-                      disabled={job.isOnlyShared}
                       size="small"
                     />
                     <Text type="secondary" size="small">
@@ -362,7 +353,7 @@ const JobGrid = () => {
                           size="small"
                           theme="solid"
                           icon={<IconPlayCircle />}
-                          disabled={job.isOnlyShared || job.running}
+                          disabled={job.running}
                           onClick={() => onJobRun(job.id)}
                         />
                       </div>
@@ -373,7 +364,6 @@ const JobGrid = () => {
                           type="secondary"
                           size="small"
                           icon={<IconEdit />}
-                          disabled={job.isOnlyShared}
                           onClick={() => navigate(`/jobs/edit/${job.id}`)}
                         />
                       </div>
@@ -384,7 +374,6 @@ const JobGrid = () => {
                           type="tertiary"
                           size="small"
                           icon={<IconCopy />}
-                          disabled={job.isOnlyShared}
                           onClick={() => navigate('/jobs/new', { state: { cloneFrom: job.id } })}
                         />
                       </div>
@@ -395,7 +384,6 @@ const JobGrid = () => {
                           type="danger"
                           size="small"
                           icon={<IconDescend2 />}
-                          disabled={job.isOnlyShared}
                           onClick={() => onListingRemoval(job.id)}
                         />
                       </div>
@@ -406,7 +394,6 @@ const JobGrid = () => {
                           type="danger"
                           size="small"
                           icon={<IconDelete />}
-                          disabled={job.isOnlyShared}
                           onClick={() => onJobRemoval(job.id)}
                         />
                       </div>

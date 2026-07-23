@@ -9,8 +9,6 @@ import {
   IconDelete,
   IconLink,
   IconMapPin,
-  IconStar,
-  IconStarStroked,
   IconEyeOpened,
 } from '@douyinfe/semi-icons';
 import no_image from '../../assets/no_image.png';
@@ -22,11 +20,10 @@ import './ListingsTable.less';
 import { useTranslation, useLocale } from '../../services/i18n/i18n.jsx';
 
 /**
- * @param {{ listings: object[], onWatch: Function, onNavigate: Function, onDelete: Function, onRestore?: Function, isHiddenView?: boolean, onStatusChange: Function }} props
+ * @param {{ listings: object[], onNavigate: Function, onDelete: Function, onRestore?: Function, isHiddenView?: boolean, onStatusChange: Function }} props
  */
 const ListingsTable = ({
   listings,
-  onWatch,
   onNavigate,
   onDelete,
   onRestore,
@@ -91,22 +88,6 @@ const ListingsTable = ({
               onChange={(next) => onStatusChange?.(item, next)}
               onTriggerClick={(e) => e.stopPropagation()}
             />
-            <Tooltip
-              content={
-                item.isWatched === 1 ? t('listings.tooltipRemoveFromWatchlist') : t('listings.tooltipAddToWatchlist')
-              }
-            >
-              <button
-                type="button"
-                className="listingsTable__row__star"
-                onClick={(e) => onWatch(e, item)}
-                aria-label={
-                  item.isWatched === 1 ? t('listings.tooltipRemoveFromWatchlist') : t('listings.tooltipAddToWatchlist')
-                }
-              >
-                {item.isWatched === 1 ? <IconStar /> : <IconStarStroked />}
-              </button>
-            </Tooltip>
             <Tooltip content={t('listings.tooltipOriginalListing')}>
               <Button
                 size="small"

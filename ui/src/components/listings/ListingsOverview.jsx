@@ -25,7 +25,7 @@ import {
 import { IconSearch, IconArrowUp, IconArrowDown, IconGridView, IconList } from '@douyinfe/semi-icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ListingDeletionModal from '../ListingDeletionModal.jsx';
-import { xhrDelete, xhrPost } from '../../services/xhr.js';
+import { xhrDelete } from '../../services/xhr.js';
 import { useActions, useSelector } from '../../services/state/store.js';
 import { debounce } from '../../utils';
 import ListingsGrid from '../grid/listings/ListingsGrid.jsx';
@@ -35,9 +35,8 @@ import { IllustrationNoResult, IllustrationNoResultDark } from '@douyinfe/semi-i
 import './ListingsOverview.less';
 import { useTranslation } from '../../services/i18n/i18n.jsx';
 
-const ListingsOverview = ({ mode = 'all' }) => {
+const ListingsOverview = () => {
   const t = useTranslation();
-  const isWatchlistMode = mode === 'watchlist';
   const listingsData = useSelector((state) => state.listingsData);
   const providers = useSelector((state) => state.provider);
   const jobs = useSelector((state) => state.jobsData.jobs);
@@ -56,7 +55,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
   const [sortField, setSortField] = useSearchParamState(sp, 'sort', 'created_at', parseString);
   const [sortDir, setSortDir] = useSearchParamState(sp, 'dir', 'desc', parseString);
   const [freeTextFilter, setFreeTextFilter] = useSearchParamState(sp, 'q', null, parseString);
-  const [watchListFilter, setWatchListFilter] = useSearchParamState(sp, 'watch', null, parseNullableBoolean);
   const [jobNameFilter, setJobNameFilter] = useSearchParamState(sp, 'job', null, parseString);
   const [activityFilter, setActivityFilter] = useSearchParamState(sp, 'active', null, parseNullableBoolean);
   const [providerFilter, setProviderFilter] = useSearchParamState(sp, 'provider', null, parseString);
@@ -68,9 +66,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
 
   const isHiddenView = hiddenOnly === true;
 
-  // In watchlist mode the watch filter is forced to "watched only" — regardless of the URL.
-  const effectiveWatchListFilter = isWatchlistMode ? true : watchListFilter;
-
   const loadData = () => {
     actions.listingsData.getListingsData({
       page,
@@ -79,7 +74,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
       sortdir: sortDir,
       freeTextFilter,
       filter: {
-        watchListFilter: effectiveWatchListFilter,
         jobNameFilter,
         activityFilter: isHiddenView ? null : activityFilter,
         providerFilter,
@@ -100,10 +94,8 @@ const ListingsOverview = ({ mode = 'all' }) => {
     providerFilter,
     activityFilter,
     jobNameFilter,
-    watchListFilter,
     statusFilter,
     hiddenOnly,
-    isWatchlistMode,
   ]);
 
   const loadDataRef = useRef(loadData);
@@ -155,21 +147,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
       handleFilterChange.cancel && handleFilterChange.cancel();
     };
   }, [handleFilterChange]);
-
-  const handleWatch = async (e, item) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await xhrPost('/api/listings/watch', { listingId: item.id });
-      Toast.success(
-        item.isWatched === 1 ? t('listings.toastRemovedFromWatchlist') : t('listings.toastAddedToWatchlist'),
-      );
-      loadData();
-    } catch (e) {
-      console.error(e);
-      Toast.error(t('listings.toastWatchlistError'));
-    }
-  };
 
   const handleStatusChange = async (item, nextStatus) => {
     try {
@@ -267,27 +244,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
             </RadioGroup>
           </span>
         </Tooltip>
-
-        {!isWatchlistMode && (
-          <Tooltip content={t('listings.filterWatchHelp')} trigger="hover" position="top">
-            <span className="listingsOverview__topbar__tooltipWrap">
-              <RadioGroup
-                type="button"
-                buttonSize="middle"
-                value={watchListFilter === null ? 'all' : String(watchListFilter)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setWatchListFilter(v === 'all' ? null : v === 'true');
-                  setPage(1);
-                }}
-              >
-                <Radio value="all">{t('listings.filterAll')}</Radio>
-                <Radio value="true">{t('listings.filterWatched')}</Radio>
-                <Radio value="false">{t('listings.filterUnwatched')}</Radio>
-              </RadioGroup>
-            </span>
-          </Tooltip>
-        )}
 
         <Tooltip content={t('listings.filterStatusHelp')} trigger="hover" position="top">
           <span className="listingsOverview__topbar__tooltipWrap">
@@ -450,7 +406,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
       {viewMode === 'grid' ? (
         <ListingsGrid
           listings={listings}
-          onWatch={handleWatch}
           onNavigate={handleNavigate}
           onDelete={handleDelete}
           onRestore={handleRestore}
@@ -460,7 +415,6 @@ const ListingsOverview = ({ mode = 'all' }) => {
       ) : (
         <ListingsTable
           listings={listings}
-          onWatch={handleWatch}
           onNavigate={handleNavigate}
           onDelete={handleDelete}
           onRestore={handleRestore}

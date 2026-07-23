@@ -5,7 +5,6 @@
 
 import { Button, Tag, Tooltip, Switch } from '@douyinfe/semi-ui-19';
 import {
-  IconAlertTriangle,
   IconBell,
   IconBriefcase,
   IconCopy,
@@ -57,20 +56,12 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
             <Switch
               size="small"
               checked={job.enabled}
-              disabled={job.isOnlyShared}
               onChange={(checked) => onStatusChange(job.id, checked)}
             />
             {job.running && (
               <Tag color="green" variant="light" size="small">
                 {t('jobs.cardRunning')}
               </Tag>
-            )}
-            {job.isOnlyShared && (
-              <Tooltip content={t('jobs.tableSharedTooltip')}>
-                <span style={{ display: 'flex', alignItems: 'center' }}>
-                  <IconAlertTriangle style={{ color: 'rgba(var(--semi-yellow-7), 1)' }} />
-                </span>
-              </Tooltip>
             )}
           </div>
 
@@ -82,7 +73,7 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
                 size="small"
                 theme="solid"
                 icon={<IconPlayCircle />}
-                disabled={job.isOnlyShared || job.running}
+                disabled={job.running}
                 onClick={() => onRun(job.id)}
               />
             </Tooltip>
@@ -91,7 +82,6 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
                 type="secondary"
                 size="small"
                 icon={<IconEdit />}
-                disabled={job.isOnlyShared}
                 onClick={() => onEdit(job.id)}
               />
             </Tooltip>
@@ -100,7 +90,6 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
                 type="tertiary"
                 size="small"
                 icon={<IconCopy />}
-                disabled={job.isOnlyShared}
                 onClick={() => onClone(job.id)}
               />
             </Tooltip>
@@ -109,7 +98,6 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
                 type="danger"
                 size="small"
                 icon={<IconDescend2 />}
-                disabled={job.isOnlyShared}
                 onClick={() => onDeleteListings(job.id)}
               />
             </Tooltip>
@@ -118,7 +106,6 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
                 type="danger"
                 size="small"
                 icon={<IconDelete />}
-                disabled={job.isOnlyShared}
                 onClick={() => onDeleteJob(job.id)}
               />
             </Tooltip>

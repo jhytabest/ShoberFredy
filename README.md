@@ -44,8 +44,7 @@ Apache-2.0 with Commons Clause and Attribution/Naming Clause.
 </p>
 
 <p align="center">
-  <a href="https://fredy.orange-coding.net/" target="_blank">Website</a>&nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://fredy-demo.orange-coding.net/" target="_blank">Demo</a>
+  <a href="https://fredy.orange-coding.net/" target="_blank">Website</a>
 </p>
 
 # Fredy 🏡 - Your Self-Hosted Real Estate Finder for Germany
@@ -54,8 +53,7 @@ Finding an apartment or house in Germany can be stressful and
 time-consuming.\
 **Fredy** makes it easier: it automatically scrapes **ImmoScout24,
 Immowelt, eBay Kleinanzeigen, and WG-Gesucht** and notifies you
-instantly via **Slack, Telegram, Email, ntfy, discord and more** when new
-listings appear.
+instantly via **Telegram** when new listings appear.
 
 With a modern architecture, Fredy provides a **clean Web UI**, removes
 duplicates across platforms, and stores results so you never see the
@@ -67,8 +65,7 @@ same listing twice.
 
 - 🏠 Scrapes **ImmoScout24, Immowelt, eBay Kleinanzeigen,
   WG-Gesucht**
-- ⚡ Instant notifications: Slack, Telegram, Email (SendGrid,
-  Mailjet), ntfy, discord
+- ⚡ Instant Telegram notifications
 - 🔎 Uses the **ImmoScout Mobile API** (reverse engineered)
 - 🌍 Runs anywhere: Docker, Node.js, self-hosted
 - 🖥️ Intuitive **Web UI** to manage searches
@@ -94,12 +91,6 @@ Fredy is proudly backed by the **JetBrains Open Source Support Program**.
   <source media="(prefers-color-scheme: light)" srcset="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg">
   <img alt="Jetbrains Open Source" src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg">
 </picture>
-
----
-
-## 👨‍🏫 Demo
-
-You can try out Fredy here: [Fredy Demo](https://fredy-demo.orange-coding.net/)
 
 ---
 
@@ -169,29 +160,17 @@ Fredy.\
 ⚠️ Always make sure the search results are sorted by **date**, so Fredy
 picks up the newest listings first.
 
-### Adapter 📡
+### Telegram 📡
 
-An **adapter** is the channel through which Fredy notifies you (Slack,
-Telegram, Email, ntfy, discord ...).\
-Each adapter has its own configuration (e.g. API keys, webhook URLs).\
-You can use multiple adapters at once --- Fredy will send new listings
-through all of them.
+Every job sends new listings to a Telegram bot and chat that you configure.
 
 ### Job 📅
 
-A **job** combines providers and adapters.\
+A **job** combines one or more providers with its Telegram destination.\
 Example: "Search apartments on ImmoScout24 + Immowelt and send results
-to Slack + Telegram."\
+to Telegram."\
 Jobs run automatically at the interval you configure (see
 `/conf/config.json`).
-
-### MCP Server 🤖
-
-Starting with **V20**, Fredy ships with a built-in **MCP Server **. This allows you to connect Fredy to LLMs (like Claude, ChatGPT, or local models via LM Studio) and query your real estate data using natural language.
-The local LLM can even enrich existing listings by checking the listing online.
-
-Run `yarn mcp:stdio` for a local stdio transport. The authenticated HTTP MCP
-route is served by the main application.
 
 ---
 
@@ -379,59 +358,6 @@ Residential proxies are a paid service (usually billed per GB, Fredy's traffic i
 
 This is not an endorsement, pick whatever fits your budget. For low-volume use like Fredy, a pay-as-you-go plan (e.g. IPRoyal) or a cheap entry tier (e.g. Webshare) is usually plenty. Make sure to select **Germany** as the proxy location and keep the search interval reasonable (the higher the interval, the less you look like a bot).
 
-## Analytics
-
-Fredy is completely free (and will always remain free). However, it would be a huge help if you’d allow me to collect some analytical data.
-Before you freak out, let me explain...  
-If you agree, Fredy will send a ping once every 6 hours to my internal tracking project (Will be open sourced soon).  
-The data includes: names of active adapters/providers, OS, architecture, Node version, and language. The information is entirely anonymous and helps me understand which adapters/providers are most frequently used.</p>
-
-**Thanks**🤘
-
-## 🐞 Debug Information
-
-Since Fredy **22.5.0** there is a built-in way to capture everything Fredy logs into the
-database for a limited time and download it as a single zip file. This is the recommended
-way to attach diagnostics to a bug report. I decided against simply putting all logs into
-a debug bundle due to privacy reasons!
-
-**How it works**
-
-- Debug logging is **opt-in** and admin-only. As long as it is off, Fredy behaves exactly
-  as before (console output only, nothing in the DB).
-- When you turn it on, every log line (`debug`, `info`, `warn`, `error`) is additionally
-  written into the `debug_logs` SQLite table. The console keeps logging at its usual level.
-- The recorded data is hard-capped at **5 MiB** via a rolling buffer: once the cap is hit,
-  the oldest entries are dropped automatically so the newest ones always survive.
-- The on/off flag is persisted, so debug logging stays on across restarts (and you'll see
-  the warning banner everywhere until you turn it off again).
-
-**Capturing a debug bundle**
-
-1. Open Fredy as an **admin** and go to **Settings → Debug**.
-2. Click **"Enable debug logging" / "Debug-Logging aktivieren"**. A red banner appears on
-   every page while recording is on.
-3. **Reproduce the bug**.
-4. Come back to **Settings → Debug** and check the progress bar, if it stayed at 0 %,
-   nothing was captured.
-5. Click **"Download debug information" / "Debug Informationen herunterladen"**. You get a
-   zip named `YYYY-MM-DD-FredyDebug-<version>.zip` containing two files:
-   - `logs.txt` - every log line captured while recording was on, prefixed with timestamp
-     and level.
-   - `sys.txt` - runtime snapshot (Fredy version, Node.js version, OS, Docker detection,
-     CPU, memory, sanitized settings). Proxy credentials and session secrets are
-     **stripped** before export.
-6. Attach the zip to the bug report.
-7. Optional but recommended: click **"Disable debug logging"** to stop recording, and
-   **"Delete stored debug logs"** once you've sent the zip so the DB does not keep them
-   around.
-
-**What is _not_ included**
-
-- passwords/privacy relevant things
-- Anything that Fredy itself does not pass through its `logger`. If a third-party library
-  writes directly to `process.stderr`, that output stays on the console only.
-
 ## 🛠️ Development
 
 ### Development Mode
@@ -518,11 +444,6 @@ flowchart TD
         C2["Provider 2"]
         C3["Provider 3"]
   end
- subgraph NotificationAdapters["Notification Adapters"]
-        F1["Adapter 1"]
-        F2["Adapter 2"]
-  end
-
     A1 --> B["FredyPipelineExecutioner"]
     A2 --> B
     A3 --> B
@@ -531,8 +452,7 @@ flowchart TD
     C2 --> D
     C3 --> D
     D --> E{"Duplicate?"}
-    E -- No --> F1
-    F1 --> F2
+    E -- No --> F["Telegram"]
 ```
 
 ---

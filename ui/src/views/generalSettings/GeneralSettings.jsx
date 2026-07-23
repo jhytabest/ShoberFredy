@@ -3,933 +3,405 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
-
-import { useActions, useSelector, useIsLoading } from '../../services/state/store';
-import { useTranslation, availableLanguages } from '../../services/i18n/i18n.jsx';
-
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Tabs,
-  TabPane,
-  TimePicker,
+  AutoComplete,
+  Banner,
   Button,
   Checkbox,
   Input,
+  InputNumber,
   Modal,
-  AutoComplete,
-  Select,
-  Banner,
   Radio,
   RadioGroup,
+  Select,
+  TabPane,
+  Tabs,
+  TimePicker,
+  Toast,
   Typography,
-  Progress,
 } from '@douyinfe/semi-ui-19';
-import { InputNumber } from '@douyinfe/semi-ui-19';
-import { xhrPost, xhrGet } from '../../services/xhr';
-import { Toast } from '@douyinfe/semi-ui-19';
-import { SegmentPart } from '../../components/segment/SegmentPart';
+import { IconFolder, IconHome, IconPulse, IconRefresh, IconSave, IconSignal, IconUser } from '@douyinfe/semi-icons';
+import { useActions, useIsLoading, useSelector } from '../../services/state/store.js';
+import { availableLanguages, useTranslation } from '../../services/i18n/i18n.jsx';
+import { xhrGet, xhrPost } from '../../services/xhr.js';
 import {
   downloadBackup as downloadBackupZip,
   precheckRestore as clientPrecheckRestore,
   restore as clientRestore,
-} from '../../services/backupRestoreClient';
-import {
-  fetchDebugStatus,
-  enableDebugLogging as apiEnableDebugLogging,
-  disableDebugLogging as apiDisableDebugLogging,
-  downloadDebugBundle,
-  clearDebugLogs as apiClearDebugLogs,
-} from '../../services/debugLoggingClient';
-import { IconSave, IconRefresh, IconSignal, IconHome, IconFolder, IconAlertTriangle } from '@douyinfe/semi-icons';
-import { debounce } from '../../utils';
+} from '../../services/backupRestoreClient.js';
+import { SegmentPart } from '../../components/segment/SegmentPart.jsx';
 import Headline from '../../components/headline/Headline.jsx';
+import { debounce } from '../../utils.js';
 import './GeneralSettings.less';
 
 const { Text } = Typography;
 
-function formatFromTimestamp(ts) {
-  const date = new Date(ts);
-  return `${date.getHours()}:${date.getMinutes() > 9 ? date.getMinutes() : '0' + date.getMinutes()}`;
+function formatFromTimestamp(timestamp) {
+  const date = new Date(timestamp);
+  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-function formatFromTBackend(time) {
-  if (time == null || time.length === 0) {
-    return null;
-  }
+function formatForTimePicker(value) {
+  if (!value) return null;
+  const [hours, minutes] = value.split(':');
   const date = new Date();
-  const split = time.split(':');
-  date.setHours(split[0]);
-  date.setMinutes(split[1]);
+  date.setHours(Number(hours), Number(minutes), 0, 0);
   return date.getTime();
 }
 
-/**
- * Human-readable byte formatter used by the Debug tab's usage label.
- * @param {number} bytes
- * @returns {string}
- */
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes)) return String(bytes);
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-}
-
-/**
- * Compute the integer percentage that `used` represents of `total`, clamped to [0, 100].
- * @param {number} used
- * @param {number} total
- * @returns {number}
- */
-function percentOf(used, total) {
-  if (!total || total <= 0) return 0;
-  const pct = Math.round((used / total) * 100);
-  if (pct < 0) return 0;
-  if (pct > 100) return 100;
-  return pct;
-}
-
-const GeneralSettings = function GeneralSettings() {
-  const actions = useActions();
+export default function GeneralSettings() {
   const t = useTranslation();
-  const [loading, setLoading] = React.useState(true);
-
+  const actions = useActions();
   const settings = useSelector((state) => state.generalSettings.settings);
-  const currentUser = useSelector((state) => state.user.currentUser);
-  const language = useSelector((state) => state.userSettings.settings.language);
-
-  const [interval, setInterval] = React.useState('');
-  const [proxyUrl, setProxyUrl] = React.useState('');
-  const [port, setPort] = React.useState('');
-  const [workingHourFrom, setWorkingHourFrom] = React.useState(null);
-  const [workingHourTo, setWorkingHourTo] = React.useState(null);
-  const [demoMode, setDemoMode] = React.useState(null);
-  const [analyticsEnabled, setAnalyticsEnabled] = React.useState(null);
-  const [sqlitePath, setSqlitePath] = React.useState(null);
-  const [baseUrl, setBaseUrl] = React.useState('');
-  const [sessionTTL, setSessionTTL] = React.useState('');
+  const userSettings = useSelector((state) => state.userSettings.settings);
+  const savingUser = useIsLoading(actions.userSettings.setHomeAddress);
   const fileInputRef = React.useRef(null);
-  const [restoreModalVisible, setRestoreModalVisible] = React.useState(false);
-  const [precheckInfo, setPrecheckInfo] = React.useState(null);
-  const [restoreBusy, setRestoreBusy] = React.useState(false);
-  const [selectedRestoreFile, setSelectedRestoreFile] = React.useState(null);
 
-  // Debug-logging tab state. status is fetched on mount + polled every 3s while the
-  // feature is active so the progress bar reflects the live byte budget.
-  // debugStatusSeq monotonically increases with every applied status update so we can
-  // discard stale polling responses that arrive after a manual enable/disable.
-  const [debugStatus, setDebugStatus] = React.useState(null);
-  const [debugBusy, setDebugBusy] = React.useState(false);
-  const [debugConfirmVisible, setDebugConfirmVisible] = React.useState(false);
-  const [debugClearConfirmVisible, setDebugClearConfirmVisible] = React.useState(false);
-  const debugStatusSeqRef = React.useRef(0);
-  const applyDebugStatus = React.useCallback((fresh) => {
-    debugStatusSeqRef.current += 1;
-    setDebugStatus(fresh);
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [port, setPort] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [sessionTTL, setSessionTTL] = useState('');
+  const [sqlitePath, setSqlitePath] = useState('');
+  const [interval, setInterval] = useState('');
+  const [proxyUrl, setProxyUrl] = useState('');
+  const [workingHourFrom, setWorkingHourFrom] = useState(null);
+  const [workingHourTo, setWorkingHourTo] = useState(null);
 
-  // User settings state
-  const homeAddress = useSelector((state) => state.userSettings.settings.home_address);
-  const listingDeletionPreference = useSelector((state) => state.userSettings.settings.listing_deletion_preference);
-  const [address, setAddress] = useState(homeAddress?.address || '');
-  const [coords, setCoords] = useState(homeAddress?.coords || null);
+  const [address, setAddress] = useState('');
+  const [coords, setCoords] = useState(null);
   const [listingDeleteHard, setListingDeleteHard] = useState(false);
   const [listingDeleteSkipPrompt, setListingDeleteSkipPrompt] = useState(false);
-  const saving = useIsLoading(actions.userSettings.setHomeAddress);
-  const savingLanguage = useIsLoading(actions.userSettings.setLanguage);
-  const [dataSource, setDataSource] = useState([]);
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
 
-  React.useEffect(() => {
-    async function init() {
-      await actions.generalSettings.getGeneralSettings();
+  const [account, setAccount] = useState({ username: '', password: '', password2: '' });
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [health, setHealth] = useState(null);
+  const [healthError, setHealthError] = useState(false);
+
+  const [restoreModalVisible, setRestoreModalVisible] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreInfo, setRestoreInfo] = useState(null);
+  const [restoreFile, setRestoreFile] = useState(null);
+
+  useEffect(() => {
+    async function initialize() {
+      await Promise.all([actions.generalSettings.getGeneralSettings(), actions.userSettings.getUserSettings()]);
+      try {
+        const response = await xhrGet('/api/account');
+        setAccount((current) => ({ ...current, username: response.json.username || '' }));
+      } catch {
+        Toast.error(t('settings.accountLoadError'));
+      }
       setLoading(false);
     }
-
-    init();
+    initialize();
   }, []);
 
-  React.useEffect(() => {
-    async function init() {
-      setInterval(settings?.interval);
-      setProxyUrl(settings?.proxyUrl ?? '');
-      setPort(settings?.port);
-      setWorkingHourFrom(settings?.workingHours?.from);
-      setWorkingHourTo(settings?.workingHours?.to);
-      setAnalyticsEnabled(settings?.analyticsEnabled || false);
-      setDemoMode(settings?.demoMode || false);
-      setSqlitePath(settings?.sqlitepath);
-      setBaseUrl(settings?.baseUrl ?? '');
-      setSessionTTL(settings?.sessionTTL ?? '');
-    }
-
-    init();
+  useEffect(() => {
+    setPort(settings?.port ?? '');
+    setBaseUrl(settings?.baseUrl ?? '');
+    setSessionTTL(settings?.sessionTTL ?? '');
+    setSqlitePath(settings?.sqlitepath ?? '');
+    setInterval(settings?.interval ?? '');
+    setProxyUrl(settings?.proxyUrl ?? '');
+    setWorkingHourFrom(settings?.workingHours?.from ?? null);
+    setWorkingHourTo(settings?.workingHours?.to ?? null);
   }, [settings]);
 
   useEffect(() => {
-    setAddress(homeAddress?.address || '');
-    setCoords(homeAddress?.coords || null);
-  }, [homeAddress]);
+    setAddress(userSettings?.home_address?.address || '');
+    setCoords(userSettings?.home_address?.coords || null);
+    setListingDeleteHard(userSettings?.listing_deletion_preference?.hardDelete ?? false);
+    setListingDeleteSkipPrompt(userSettings?.listing_deletion_preference?.skipPrompt ?? false);
+  }, [userSettings]);
 
-  useEffect(() => {
-    setListingDeleteHard(listingDeletionPreference?.hardDelete ?? false);
-    setListingDeleteSkipPrompt(listingDeletionPreference?.skipPrompt ?? false);
-  }, [listingDeletionPreference]);
-
-  // Initial debug-status load. Subsequent updates flow through applyDebugStatus()
-  // (called by polling + after every enable/disable action), so this effect only
-  // needs to fire once on mount.
   useEffect(() => {
     let cancelled = false;
-    fetchDebugStatus()
-      .then((s) => {
-        if (!cancelled) applyDebugStatus(s);
-      })
-      .catch((e) => {
-        // Non-fatal: tab is still usable, polling will retry.
-        console.error('Failed to load debug status', e);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [applyDebugStatus]);
-
-  // Live polling while the feature is active so the progress bar reflects new entries
-  // as they are written. We intentionally do NOT poll while inactive — the size stays
-  // constant and there's no Banner to update. Stale poll responses (where a manual
-  // enable/disable bumped the sequence in the meantime) are discarded so the UI does
-  // not flicker back to the previous state for ~3s.
-  useEffect(() => {
-    if (!debugStatus?.enabled) return undefined;
-    const id = window.setInterval(async () => {
-      const seqAtStart = debugStatusSeqRef.current;
+    const refresh = async () => {
       try {
-        const fresh = await fetchDebugStatus();
-        if (debugStatusSeqRef.current === seqAtStart) {
-          applyDebugStatus(fresh);
+        const response = await fetch('/health', { credentials: 'include' });
+        const payload = await response.json();
+        if (!cancelled) {
+          setHealth(payload);
+          setHealthError(!response.ok);
         }
       } catch {
-        // ignore transient errors; next tick will retry
+        if (!cancelled) setHealthError(true);
       }
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [debugStatus?.enabled, applyDebugStatus]);
-
-  const nullOrEmpty = (val) => val == null || val.length === 0;
-
-  const handleStore = async () => {
-    if (nullOrEmpty(interval)) {
-      Toast.error(t('settings.toastIntervalEmpty'));
-      return;
-    }
-    if (nullOrEmpty(port)) {
-      Toast.error(t('settings.toastPortEmpty'));
-      return;
-    }
-    if (
-      (!nullOrEmpty(workingHourFrom) && nullOrEmpty(workingHourTo)) ||
-      (nullOrEmpty(workingHourFrom) && !nullOrEmpty(workingHourTo))
-    ) {
-      Toast.error(t('settings.toastWorkingHoursIncomplete'));
-      return;
-    }
-    if (nullOrEmpty(sqlitePath)) {
-      Toast.error(t('settings.toastSqlitePathEmpty'));
-      return;
-    }
-    try {
-      await xhrPost('/api/admin/generalSettings', {
-        interval,
-        proxyUrl: proxyUrl?.trim() ?? '',
-        port,
-        workingHours: {
-          from: workingHourFrom,
-          to: workingHourTo,
-        },
-        demoMode,
-        analyticsEnabled,
-        sqlitepath: sqlitePath,
-        baseUrl,
-        sessionTTL,
-      });
-    } catch (exception) {
-      console.error(exception);
-      // The backend returns the concrete reason in `json.error` (e.g. a 403
-      // "Only admins can change these settings."). Fall back to `json.message`
-      // and finally the generic toast so the user always sees why it failed.
-      const serverReason = exception?.json?.error ?? exception?.json?.message;
-      Toast.error(serverReason ?? t('settings.toastSaveError'));
-      return;
-    }
-    Toast.success(t('settings.toastSavedReloading'));
-    setTimeout(() => {
-      location.reload();
-    }, 3000);
-  };
-
-  const handleDownloadBackup = React.useCallback(async () => {
-    try {
-      await downloadBackupZip();
-    } catch (e) {
-      console.error(e);
-      Toast.error(t('settings.backupDownloadError'));
-    }
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
-  const precheckRestore = React.useCallback(async (file) => {
-    try {
-      const data = await clientPrecheckRestore(file);
-      setPrecheckInfo(data);
-      setRestoreModalVisible(true);
-    } catch (e) {
-      console.error(e);
-      Toast.error(t('settings.backupAnalyzeError'));
-    }
-  }, []);
-
-  const performRestore = React.useCallback(
-    async (force) => {
-      try {
-        setRestoreBusy(true);
-        await clientRestore(selectedRestoreFile, force);
-        Toast.success(t('settings.backupRestoreCompleted'));
-      } catch (e) {
-        console.error(e);
-        Toast.error(e?.message || t('settings.backupRestoreError'));
-      } finally {
-        setRestoreBusy(false);
-      }
-    },
-    [selectedRestoreFile],
-  );
-
-  const handleSelectRestoreFile = React.useCallback(
-    async (ev) => {
-      const file = ev?.target?.files?.[0];
-      if (!file) return;
-      setSelectedRestoreFile(file);
-      await precheckRestore(file);
-      ev.target.value = '';
-    },
-    [precheckRestore],
-  );
-
-  const handleOpenFilePicker = React.useCallback(() => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  }, []);
-
-  // ── Debug-logging actions ────────────────────────────────────────────────────
-  // performEnableDebug() centralizes the actual enable call so both branches of the
-  // confirm dialog ("delete" vs. "keep") plus the no-confirm fast-path can share it.
-  const performEnableDebug = React.useCallback(
-    async ({ clearPrevious }) => {
-      setDebugBusy(true);
-      try {
-        const fresh = await apiEnableDebugLogging({ clearPrevious });
-        applyDebugStatus(fresh);
-        // Keep the global generalSettings store in sync so the app-wide red banner
-        // (which reads settings.debug_logging_enabled) updates immediately.
-        await actions.generalSettings.getGeneralSettings();
-        Toast.success(t('settings.debugToastEnabled'));
-      } catch (e) {
-        console.error(e);
-        Toast.error(t('settings.debugToastEnableError'));
-      } finally {
-        setDebugBusy(false);
-        setDebugConfirmVisible(false);
-      }
-    },
-    [actions.generalSettings, applyDebugStatus, t],
-  );
-
-  const handleToggleDebugLogging = React.useCallback(async () => {
-    // Guard against the initial-load race: if status hasn't arrived yet, ignore the
-    // click. The button is also disabled when debugStatus == null, this is belt &
-    // braces for the case where the click somehow reached the handler anyway.
-    if (debugStatus == null) return;
-    if (debugStatus.enabled) {
-      setDebugBusy(true);
-      try {
-        const fresh = await apiDisableDebugLogging();
-        applyDebugStatus(fresh);
-        await actions.generalSettings.getGeneralSettings();
-        Toast.success(t('settings.debugToastDisabled'));
-      } catch (e) {
-        console.error(e);
-        Toast.error(t('settings.debugToastDisableError'));
-      } finally {
-        setDebugBusy(false);
-      }
-      return;
-    }
-    // Enabling: if logs from a previous session are still around, ask first.
-    if (debugStatus.hasLogs) {
-      setDebugConfirmVisible(true);
-      return;
-    }
-    await performEnableDebug({ clearPrevious: false });
-  }, [debugStatus, performEnableDebug, actions.generalSettings, applyDebugStatus, t]);
-
-  const handleDownloadDebugBundle = React.useCallback(async () => {
-    try {
-      await downloadDebugBundle();
-    } catch (e) {
-      console.error(e);
-      if (e?.code === 'NO_LOGS') {
-        Toast.error(t('settings.debugToastNoLogs'));
-      } else {
-        Toast.error(t('settings.debugToastDownloadError'));
-      }
-    }
-  }, [t]);
-
-  // Deleting stored logs is a separate action from disabling the feature: the user can
-  // free up the rolling buffer mid-recording without turning off collection. The
-  // confirmation dialog makes the destructive nature explicit.
-  const performClearDebugLogs = React.useCallback(async () => {
-    setDebugBusy(true);
-    try {
-      const fresh = await apiClearDebugLogs();
-      applyDebugStatus(fresh);
-      Toast.success(t('settings.debugToastCleared'));
-    } catch (e) {
-      console.error(e);
-      Toast.error(t('settings.debugToastClearError'));
-    } finally {
-      setDebugBusy(false);
-      setDebugClearConfirmVisible(false);
-    }
-  }, [applyDebugStatus, t]);
-
-  const handleSaveUserSettings = async () => {
-    try {
-      const responseJson = await actions.userSettings.setHomeAddress(address);
-      setCoords(responseJson.coords);
-      await actions.userSettings.setListingDeletionPreference({
-        skipPrompt: listingDeleteSkipPrompt,
-        hardDelete: listingDeleteHard,
-      });
-      await actions.userSettings.getUserSettings();
-      Toast.success(t('settings.userSettingsSaved'));
-    } catch (error) {
-      Toast.error(error.json?.error || t('settings.userSettingsSaveError'));
-    }
-  };
-
-  const debouncedSearch = useMemo(
+  const searchAddress = useMemo(
     () =>
       debounce((value) => {
+        if (!value) return setAddressSuggestions([]);
         xhrGet(`/api/user/settings/autocomplete?q=${encodeURIComponent(value)}`)
-          .then((response) => {
-            if (response.status === 200) {
-              setDataSource(response.json);
-            }
-          })
-          .catch(() => {});
+          .then((response) => setAddressSuggestions(response.json))
+          .catch(() => setAddressSuggestions([]));
       }, 300),
     [],
   );
 
-  const searchAddress = (value) => {
-    if (!value) {
-      setDataSource([]);
+  const saveRuntimeSettings = async () => {
+    if (!interval || !port || !sqlitePath) {
+      Toast.error(t('settings.toastSaveError'));
       return;
     }
-    debouncedSearch(value);
+    if (Boolean(workingHourFrom) !== Boolean(workingHourTo)) {
+      Toast.error(t('settings.toastWorkingHoursIncomplete'));
+      return;
+    }
+    try {
+      await xhrPost('/api/admin/generalSettings', {
+        port,
+        baseUrl,
+        sessionTTL,
+        sqlitepath: sqlitePath,
+        interval,
+        proxyUrl: proxyUrl.trim(),
+        workingHours: { from: workingHourFrom, to: workingHourTo },
+      });
+      Toast.success(t('settings.toastSavedReloading'));
+      window.setTimeout(() => window.location.reload(), 3000);
+    } catch (error) {
+      Toast.error(error?.json?.error || t('settings.toastSaveError'));
+    }
   };
+
+  const saveUserSettings = async () => {
+    try {
+      const result = await actions.userSettings.setHomeAddress(address);
+      setCoords(result.coords);
+      await actions.userSettings.setListingDeletionPreference({
+        hardDelete: listingDeleteHard,
+        skipPrompt: listingDeleteSkipPrompt,
+      });
+      Toast.success(t('settings.userSettingsSaved'));
+    } catch (error) {
+      Toast.error(error?.json?.error || t('settings.userSettingsSaveError'));
+    }
+  };
+
+  const saveAccount = async () => {
+    if (!account.username.trim() || account.password !== account.password2) {
+      Toast.error(t('settings.accountValidationError'));
+      return;
+    }
+    setAccountSaving(true);
+    try {
+      await xhrPost('/api/account', account);
+      setAccount((current) => ({ ...current, password: '', password2: '' }));
+      Toast.success(t('settings.accountSaved'));
+    } catch (error) {
+      Toast.error(error?.json?.error || t('settings.accountSaveError'));
+    } finally {
+      setAccountSaving(false);
+    }
+  };
+
+  const selectRestore = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      setRestoreFile(file);
+      setRestoreInfo(await clientPrecheckRestore(file));
+      setRestoreModalVisible(true);
+    } catch {
+      Toast.error(t('settings.backupAnalyzeError'));
+    }
+  };
+
+  const restoreBackup = async () => {
+    setRestoreBusy(true);
+    try {
+      await clientRestore(restoreFile, !restoreInfo?.compatible);
+      Toast.success(t('settings.backupRestoreCompleted'));
+      setRestoreModalVisible(false);
+    } catch (error) {
+      Toast.error(error?.message || t('settings.backupRestoreError'));
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
+  if (loading) return null;
 
   return (
     <div className="generalSettings">
       <Headline text={t('settings.title')} />
-      {!loading && (
-        <>
-          <Tabs type="line">
-            <TabPane
-              tab={
-                <span>
-                  <IconSignal size="small" style={{ marginRight: 6 }} />
-                  {t('settings.tabSystem')}
-                </span>
-              }
-              itemKey="system"
-            >
-              <div className="generalSettings__tab-content">
-                <SegmentPart name={t('settings.port')} helpText={t('settings.portHelp')}>
-                  <InputNumber
-                    min={0}
-                    max={99999}
-                    placeholder={t('settings.portPlaceholder')}
-                    value={port}
-                    formatter={(value) => `${value}`.replace(/\D/g, '')}
-                    onChange={(value) => setPort(value)}
-                    style={{ maxWidth: 160 }}
-                  />
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.baseUrl')} helpText={t('settings.baseUrlHelp')}>
-                  <Input
-                    type="text"
-                    placeholder={t('settings.baseUrlPlaceholder')}
-                    value={baseUrl}
-                    onChange={(value) => setBaseUrl(value)}
-                  />
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.sessionTTL')} helpText={t('settings.sessionTTLHelp')}>
-                  <Input
-                    type="text"
-                    placeholder={t('settings.sessionTTLPlaceholder')}
-                    value={sessionTTL}
-                    onChange={(value) => setSessionTTL(value)}
-                  />
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.sqlitePath')} helpText={t('settings.sqlitePathHelp')}>
-                  <Banner
-                    fullMode={false}
-                    type="warning"
-                    closeIcon={null}
-                    style={{ marginBottom: '12px' }}
-                    description={t('settings.sqlitePathWarning')}
-                  />
-                  <Input
-                    type="text"
-                    placeholder={t('settings.sqlitePathPlaceholder')}
-                    value={sqlitePath}
-                    onChange={(value) => setSqlitePath(value)}
-                  />
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.analytics')} helpText={t('settings.analyticsHelp')}>
-                  <Checkbox checked={analyticsEnabled} onChange={(e) => setAnalyticsEnabled(e.target.checked)}>
-                    {t('settings.analyticsEnable')}
-                  </Checkbox>
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.demoMode')} helpText={t('settings.demoModeHelp')}>
-                  <Checkbox checked={demoMode} onChange={(e) => setDemoMode(e.target.checked)}>
-                    {t('settings.demoModeEnable')}
-                  </Checkbox>
-                </SegmentPart>
-
-                <div className="generalSettings__save-row">
-                  <Button type="primary" theme="solid" onClick={handleStore} icon={<IconSave />}>
-                    {t('settings.save')}
-                  </Button>
-                </div>
-              </div>
-            </TabPane>
-
-            <TabPane
-              tab={
-                <span>
-                  <IconRefresh size="small" style={{ marginRight: 6 }} />
-                  {t('settings.tabExecution')}
-                </span>
-              }
-              itemKey="execution"
-            >
-              <div className="generalSettings__tab-content">
-                <SegmentPart name={t('settings.searchInterval')} helpText={t('settings.searchIntervalHelp')}>
-                  <InputNumber
-                    min={5}
-                    max={1440}
-                    placeholder={t('settings.searchIntervalPlaceholder')}
-                    value={interval}
-                    formatter={(value) => `${value}`.replace(/\D/g, '')}
-                    onChange={(value) => setInterval(value)}
-                    suffix={t('settings.searchIntervalSuffix')}
-                    style={{ maxWidth: 200 }}
-                  />
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.workingHours')} helpText={t('settings.workingHoursHelp')}>
-                  <div className="generalSettings__timePickerContainer">
-                    <TimePicker
-                      format={'HH:mm'}
-                      insetLabel={t('settings.workingHoursFrom')}
-                      value={formatFromTBackend(workingHourFrom)}
-                      placeholder=""
-                      onChange={(val) => {
-                        setWorkingHourFrom(val == null ? null : formatFromTimestamp(val));
-                      }}
-                    />
-                    <TimePicker
-                      format={'HH:mm'}
-                      insetLabel={t('settings.workingHoursUntil')}
-                      value={formatFromTBackend(workingHourTo)}
-                      placeholder=""
-                      onChange={(val) => {
-                        setWorkingHourTo(val == null ? null : formatFromTimestamp(val));
-                      }}
-                    />
-                  </div>
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.proxyUrl')} helpText={t('settings.proxyUrlHelp')}>
-                  <Input
-                    type="text"
-                    placeholder={t('settings.proxyUrlPlaceholder')}
-                    value={proxyUrl}
-                    onChange={(value) => setProxyUrl(value)}
-                  />
-                </SegmentPart>
-
-                <div className="generalSettings__save-row">
-                  <Button type="primary" theme="solid" onClick={handleStore} icon={<IconSave />}>
-                    {t('settings.save')}
-                  </Button>
-                </div>
-              </div>
-            </TabPane>
-
-            <TabPane
-              tab={
-                <span>
-                  <IconHome size="small" style={{ marginRight: 6 }} />
-                  {t('settings.tabUserSettings')}
-                </span>
-              }
-              itemKey="userSettings"
-            >
-              <div className="generalSettings__tab-content">
-                <SegmentPart name={t('settings.language')} helpText={t('settings.languageHelp')}>
-                  <Select
-                    style={{ width: 240 }}
-                    value={language ?? 'en'}
-                    disabled={savingLanguage}
-                    optionList={availableLanguages.map((lang) => ({
-                      label: `${lang.flag} ${lang.name}`,
-                      value: lang.code,
-                    }))}
-                    onChange={async (code) => {
-                      try {
-                        await actions.userSettings.setLanguage(code);
-                      } catch {
-                        Toast.error(t('settings.languageSaveError'));
-                      }
-                    }}
-                  />
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.homeAddress')} helpText={t('settings.homeAddressHelp')}>
-                  <AutoComplete
-                    data={dataSource}
-                    value={address}
-                    showClear
-                    onChange={(v) => setAddress(v)}
-                    onSearch={searchAddress}
-                    placeholder={t('settings.homeAddressPlaceholder')}
-                    style={{ width: '100%' }}
-                  />
-                  {coords && coords.lat === -1 && (
-                    <Banner
-                      type="danger"
-                      description={t('settings.homeAddressGeoError')}
-                      closeIcon={null}
-                      style={{ marginTop: 8 }}
-                    />
-                  )}
-                </SegmentPart>
-
-                <SegmentPart name={t('settings.listingDeletion')} helpText={t('settings.listingDeletionHelp')}>
-                  <RadioGroup
-                    value={listingDeleteHard ? 'hard' : 'soft'}
-                    onChange={(e) => setListingDeleteHard(e.target.value === 'hard')}
-                  >
-                    <Radio value="soft">
-                      <div>
-                        <Text strong>{t('settings.listingDeletionSoftLabel')}</Text>
-                        <br />
-                        <Text type="secondary">{t('settings.listingDeletionSoftDesc')}</Text>
-                      </div>
-                    </Radio>
-                    <Radio value="hard">
-                      <div>
-                        <Text strong>{t('settings.listingDeletionHardLabel')}</Text>
-                        <br />
-                        <Text type="secondary">
-                          {t('settings.listingDeletionHardDesc')}
-                          <br />
-                          <Text type="warning">{t('settings.listingDeletionHardConsequence')}</Text>
-                        </Text>
-                      </div>
-                    </Radio>
-                  </RadioGroup>
-                  <Checkbox
-                    checked={listingDeleteSkipPrompt}
-                    onChange={(e) => setListingDeleteSkipPrompt(e.target.checked)}
-                    style={{ marginTop: 12 }}
-                  >
-                    {t('settings.listingDeletionSkipPrompt')}
-                  </Checkbox>
-                </SegmentPart>
-
-                <div className="generalSettings__save-row">
-                  <Button
-                    icon={<IconSave />}
-                    theme="solid"
-                    type="primary"
-                    onClick={handleSaveUserSettings}
-                    loading={saving}
-                  >
-                    {t('settings.save')}
-                  </Button>
-                </div>
-              </div>
-            </TabPane>
-
-            <TabPane
-              tab={
-                <span>
-                  <IconFolder size="small" style={{ marginRight: 6 }} />
-                  {t('settings.tabBackup')}
-                </span>
-              }
-              itemKey="backup"
-            >
-              <div className="generalSettings__tab-content">
-                {demoMode && !currentUser?.isAdmin && (
-                  <Banner
-                    fullMode={false}
-                    type="warning"
-                    closeIcon={null}
-                    style={{ marginBottom: '12px' }}
-                    description={t('settings.backupDemoWarning')}
-                  />
-                )}
-                <SegmentPart name={t('settings.backupSectionName')} helpText={t('settings.backupHelp')}>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Button
-                      theme="solid"
-                      icon={<IconSave />}
-                      onClick={handleDownloadBackup}
-                      disabled={demoMode && !currentUser?.isAdmin}
-                    >
-                      {t('settings.backupDownload')}
-                    </Button>
-                    <input
-                      type="file"
-                      accept=".zip,application/zip"
-                      ref={fileInputRef}
-                      style={{ display: 'none' }}
-                      onChange={handleSelectRestoreFile}
-                    />
-                    <Button
-                      onClick={handleOpenFilePicker}
-                      theme="light"
-                      icon={<IconFolder />}
-                      disabled={demoMode && !currentUser?.isAdmin}
-                    >
-                      {t('settings.backupRestoreFromZip')}
-                    </Button>
-                  </div>
-                </SegmentPart>
-              </div>
-            </TabPane>
-
-            {currentUser?.isAdmin && (
-              <TabPane
-                tab={
-                  <span>
-                    <IconAlertTriangle
-                      size="small"
-                      style={{
-                        marginRight: 6,
-                        color: debugStatus?.enabled ? 'var(--semi-color-danger)' : undefined,
-                      }}
-                    />
-                    {t('settings.tabDebug')}
-                  </span>
-                }
-                itemKey="debug"
-              >
-                <div className="generalSettings__tab-content">
-                  <SegmentPart name={t('settings.debugSectionName')}>
-                    <Banner
-                      type="info"
-                      fullMode={false}
-                      closeIcon={null}
-                      style={{ marginBottom: 12 }}
-                      title={<div style={{ fontWeight: 600, fontSize: '14px' }}>{t('settings.debugInfoTitle')}</div>}
-                      description={t('settings.debugInfoDescription')}
-                    />
-
-                    {debugStatus?.enabled ? (
-                      <Banner
-                        type="danger"
-                        fullMode={false}
-                        closeIcon={null}
-                        style={{ marginBottom: 12 }}
-                        description={
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{t('settings.debugStatusActive')}</div>
-                            <div style={{ marginTop: 8 }}>
-                              <Text type="secondary" style={{ marginRight: 8 }}>
-                                {t('settings.debugUsedLabel')}
-                              </Text>
-                              <Text>
-                                {t('settings.debugUsedValue', {
-                                  used: formatBytes(debugStatus.size),
-                                  max: formatBytes(debugStatus.max),
-                                  percent: percentOf(debugStatus.size, debugStatus.max),
-                                })}
-                              </Text>
-                              <Progress
-                                percent={percentOf(debugStatus.size, debugStatus.max)}
-                                stroke="var(--semi-color-danger)"
-                                aria-label="debug log storage"
-                                style={{ marginTop: 6 }}
-                              />
-                            </div>
-                          </div>
-                        }
-                      />
-                    ) : (
-                      <div style={{ marginBottom: 12 }}>
-                        <Text type="secondary">{t('settings.debugStatusInactive')}</Text>
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <Button
-                        theme="solid"
-                        type={debugStatus?.enabled ? 'danger' : 'primary'}
-                        loading={debugBusy}
-                        disabled={debugStatus == null}
-                        onClick={handleToggleDebugLogging}
-                      >
-                        {debugStatus?.enabled ? t('settings.debugDisableButton') : t('settings.debugEnableButton')}
-                      </Button>
-                      <Button
-                        theme="light"
-                        icon={<IconSave />}
-                        disabled={debugStatus == null || !debugStatus?.everEnabled || !debugStatus?.hasLogs}
-                        onClick={handleDownloadDebugBundle}
-                      >
-                        {t('settings.debugDownloadButton')}
-                      </Button>
-                      {debugStatus?.hasLogs && (
-                        <Button theme="solid" type="warning" onClick={() => setDebugClearConfirmVisible(true)}>
-                          {t('settings.debugClearButton')}
-                        </Button>
-                      )}
-                    </div>
-                  </SegmentPart>
-                </div>
-              </TabPane>
-            )}
-          </Tabs>
-        </>
-      )}
-
-      {restoreModalVisible && (
-        <Modal
-          title={t('settings.restoreModalTitle')}
-          visible={restoreModalVisible}
-          onCancel={() => setRestoreModalVisible(false)}
-          onOk={() => performRestore(!precheckInfo?.compatible)}
-          okText={precheckInfo?.compatible ? t('settings.restoreNow') : t('settings.restoreAnyway')}
-          okType={precheckInfo?.compatible ? 'primary' : 'danger'}
-          confirmLoading={restoreBusy}
-        >
-          {precheckInfo?.severity === 'danger' && (
-            <Banner
-              type="danger"
-              fullMode={false}
-              closeIcon={null}
-              title={<div style={{ fontWeight: 600, fontSize: '14px' }}>{t('settings.restoreProblemDetected')}</div>}
-              description={<div>{precheckInfo?.message}</div>}
-            />
-          )}
-          {precheckInfo?.severity === 'warning' && (
-            <Banner
-              type="warning"
-              fullMode={false}
-              closeIcon={null}
-              title={<div style={{ fontWeight: 600, fontSize: '14px' }}>{t('settings.restoreMigrationsApplied')}</div>}
-              description={<div>{precheckInfo?.message}</div>}
-            />
-          )}
-          {precheckInfo?.severity === 'info' && (
-            <Banner
-              type="success"
-              fullMode={false}
-              closeIcon={null}
-              title={<div style={{ fontWeight: 600, fontSize: '14px' }}>{t('settings.restoreCompatible')}</div>}
-              description={<div>{precheckInfo?.message}</div>}
-            />
-          )}
-          <div style={{ marginTop: '0.5rem', fontSize: '12px', color: 'var(--semi-color-text-2)' }}>
-            {t('settings.restoreMigrationInfo', {
-              backupMigration: precheckInfo?.backupMigration ?? 'unknown',
-              requiredMigration: precheckInfo?.requiredMigration ?? 'unknown',
-            })}
-          </div>
-        </Modal>
-      )}
-
-      {debugConfirmVisible && (
-        <Modal
-          title={t('settings.debugConfirmReenableTitle')}
-          visible={debugConfirmVisible}
-          onCancel={() => {
-            // Defensive reset in case a network blip left debugBusy stuck while the
-            // user dismissed the dialog via the X / backdrop.
-            setDebugBusy(false);
-            setDebugConfirmVisible(false);
-          }}
-          footer={
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={() => performEnableDebug({ clearPrevious: false })} loading={debugBusy}>
-                {t('settings.debugConfirmKeep')}
-              </Button>
-              <Button
-                type="danger"
-                theme="solid"
-                onClick={() => performEnableDebug({ clearPrevious: true })}
-                loading={debugBusy}
-              >
-                {t('settings.debugConfirmDelete')}
-              </Button>
+      <Tabs type="line">
+        <TabPane tab={<span><IconSignal size="small" /> {t('settings.tabSystem')}</span>} itemKey="system">
+          <div className="generalSettings__tab-content">
+            <SegmentPart name={t('settings.port')} helpText={t('settings.portHelp')}>
+              <InputNumber value={port} min={1} max={65535} onChange={setPort} />
+            </SegmentPart>
+            <SegmentPart name={t('settings.baseUrl')} helpText={t('settings.baseUrlHelp')}>
+              <Input value={baseUrl} onChange={setBaseUrl} placeholder={t('settings.baseUrlPlaceholder')} />
+            </SegmentPart>
+            <SegmentPart name={t('settings.sessionTTL')} helpText={t('settings.sessionTTLHelp')}>
+              <InputNumber value={sessionTTL} min={1} onChange={setSessionTTL} />
+            </SegmentPart>
+            <SegmentPart name={t('settings.sqlitePath')} helpText={t('settings.sqlitePathHelp')}>
+              <Banner type="warning" fullMode={false} closeIcon={null} description={t('settings.sqlitePathWarning')} />
+              <Input value={sqlitePath} onChange={setSqlitePath} />
+            </SegmentPart>
+            <div className="generalSettings__save-row">
+              <Button theme="solid" type="primary" icon={<IconSave />} onClick={saveRuntimeSettings}>{t('settings.save')}</Button>
             </div>
-          }
-        >
-          <div>{t('settings.debugConfirmReenableMessage')}</div>
-        </Modal>
-      )}
-
-      {debugClearConfirmVisible && (
-        <Modal
-          title={t('settings.debugClearConfirmTitle')}
-          visible={debugClearConfirmVisible}
-          onCancel={() => {
-            setDebugBusy(false);
-            setDebugClearConfirmVisible(false);
-          }}
-          footer={
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={() => setDebugClearConfirmVisible(false)} disabled={debugBusy}>
-                {t('settings.debugClearConfirmCancel')}
-              </Button>
-              <Button type="warning" theme="solid" onClick={performClearDebugLogs} loading={debugBusy}>
-                {t('settings.debugClearConfirmDelete')}
-              </Button>
-            </div>
-          }
-        >
-          <div>
-            {t('settings.debugClearConfirmMessage', {
-              recordingState: debugStatus?.enabled
-                ? t('settings.debugClearConfirmRecordingOn')
-                : t('settings.debugClearConfirmRecordingOff'),
-            })}
           </div>
-        </Modal>
-      )}
+        </TabPane>
+
+        <TabPane tab={<span><IconRefresh size="small" /> {t('settings.tabExecution')}</span>} itemKey="execution">
+          <div className="generalSettings__tab-content">
+            <SegmentPart name={t('settings.searchInterval')} helpText={t('settings.searchIntervalHelp')}>
+              <InputNumber value={interval} min={5} max={1440} suffix={t('settings.searchIntervalSuffix')} onChange={setInterval} />
+            </SegmentPart>
+            <SegmentPart name={t('settings.workingHours')} helpText={t('settings.workingHoursHelp')}>
+              <div className="generalSettings__timePickerContainer">
+                <TimePicker
+                  format="HH:mm"
+                  insetLabel={t('settings.workingHoursFrom')}
+                  value={formatForTimePicker(workingHourFrom)}
+                  onChange={(value) => setWorkingHourFrom(value == null ? null : formatFromTimestamp(value))}
+                />
+                <TimePicker
+                  format="HH:mm"
+                  insetLabel={t('settings.workingHoursUntil')}
+                  value={formatForTimePicker(workingHourTo)}
+                  onChange={(value) => setWorkingHourTo(value == null ? null : formatFromTimestamp(value))}
+                />
+              </div>
+            </SegmentPart>
+            <SegmentPart name={t('settings.proxyUrl')} helpText={t('settings.proxyUrlHelp')}>
+              <Input value={proxyUrl} onChange={setProxyUrl} placeholder={t('settings.proxyUrlPlaceholder')} />
+            </SegmentPart>
+            <div className="generalSettings__save-row">
+              <Button theme="solid" type="primary" icon={<IconSave />} onClick={saveRuntimeSettings}>{t('settings.save')}</Button>
+            </div>
+          </div>
+        </TabPane>
+
+        <TabPane tab={<span><IconHome size="small" /> {t('settings.tabUserSettings')}</span>} itemKey="preferences">
+          <div className="generalSettings__tab-content">
+            <SegmentPart name={t('settings.language')} helpText={t('settings.languageHelp')}>
+              <Select
+                value={userSettings?.language ?? 'en'}
+                optionList={availableLanguages.map((language) => ({
+                  label: `${language.flag} ${language.name}`,
+                  value: language.code,
+                }))}
+                onChange={(value) => actions.userSettings.setLanguage(value)}
+              />
+            </SegmentPart>
+            <SegmentPart name={t('settings.homeAddress')} helpText={t('settings.homeAddressHelp')}>
+              <AutoComplete
+                data={addressSuggestions}
+                value={address}
+                showClear
+                onChange={setAddress}
+                onSearch={searchAddress}
+                style={{ width: '100%' }}
+              />
+              {coords?.lat === -1 && <Banner type="danger" closeIcon={null} description={t('settings.homeAddressGeoError')} />}
+            </SegmentPart>
+            <SegmentPart name={t('settings.listingDeletion')} helpText={t('settings.listingDeletionHelp')}>
+              <RadioGroup value={listingDeleteHard ? 'hard' : 'soft'} onChange={(event) => setListingDeleteHard(event.target.value === 'hard')}>
+                <Radio value="soft"><Text strong>{t('settings.listingDeletionSoftLabel')}</Text></Radio>
+                <Radio value="hard"><Text strong>{t('settings.listingDeletionHardLabel')}</Text></Radio>
+              </RadioGroup>
+              <Checkbox checked={listingDeleteSkipPrompt} onChange={(event) => setListingDeleteSkipPrompt(event.target.checked)}>
+                {t('settings.listingDeletionSkipPrompt')}
+              </Checkbox>
+            </SegmentPart>
+            <div className="generalSettings__save-row">
+              <Button theme="solid" type="primary" icon={<IconSave />} loading={savingUser} onClick={saveUserSettings}>{t('settings.save')}</Button>
+            </div>
+          </div>
+        </TabPane>
+
+        <TabPane tab={<span><IconUser size="small" /> {t('settings.tabAccount')}</span>} itemKey="account">
+          <div className="generalSettings__tab-content">
+            <SegmentPart name={t('settings.accountUsername')}>
+              <Input value={account.username} onChange={(username) => setAccount((current) => ({ ...current, username }))} />
+            </SegmentPart>
+            <SegmentPart name={t('settings.accountPassword')} helpText={t('settings.accountPasswordHelp')}>
+              <Input mode="password" value={account.password} onChange={(password) => setAccount((current) => ({ ...current, password }))} />
+            </SegmentPart>
+            <SegmentPart name={t('settings.accountPasswordRepeat')}>
+              <Input mode="password" value={account.password2} onChange={(password2) => setAccount((current) => ({ ...current, password2 }))} />
+            </SegmentPart>
+            <div className="generalSettings__save-row">
+              <Button theme="solid" type="primary" icon={<IconSave />} loading={accountSaving} onClick={saveAccount}>{t('settings.save')}</Button>
+            </div>
+          </div>
+        </TabPane>
+
+        <TabPane tab={<span><IconPulse size="small" /> {t('settings.tabRuntime')}</span>} itemKey="runtime">
+          <div className="generalSettings__tab-content">
+            <Banner
+              type={!healthError && health?.status === 'ok' ? 'success' : 'danger'}
+              fullMode={false}
+              closeIcon={null}
+              title={t(!healthError && health?.status === 'ok' ? 'settings.runtimeHealthy' : 'settings.runtimeUnhealthy')}
+              description={health ? Object.entries(health.checks || {}).map(([name, ok]) => `${name}: ${ok ? 'ok' : 'failed'}`).join(' · ') : t('settings.runtimeUnavailable')}
+            />
+            <SegmentPart name={t('settings.runtimeWorkers')}>
+              <div className="generalSettings__workers">
+                {(health?.workers || []).map((worker) => (
+                  <div key={worker.name}>
+                    <Text strong>{worker.name}</Text>
+                    <Text type={worker.healthy ? 'success' : 'danger'}>
+                      {worker.healthy ? t('settings.runtimeWorkerHealthy') : t('settings.runtimeWorkerUnhealthy')}
+                    </Text>
+                    <Text type="secondary">
+                      {t('settings.runtimeWorkerCounts', { completed: worker.completedItems, failed: worker.failedItems })}
+                    </Text>
+                  </div>
+                ))}
+              </div>
+            </SegmentPart>
+          </div>
+        </TabPane>
+
+        <TabPane tab={<span><IconFolder size="small" /> {t('settings.tabBackup')}</span>} itemKey="backup">
+          <div className="generalSettings__tab-content">
+            <SegmentPart name={t('settings.backupSectionName')} helpText={t('settings.backupHelp')}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button icon={<IconSave />} onClick={async () => {
+                  try { await downloadBackupZip(); } catch { Toast.error(t('settings.backupDownloadError')); }
+                }}>{t('settings.backupDownload')}</Button>
+                <input ref={fileInputRef} type="file" accept=".zip,application/zip" hidden onChange={selectRestore} />
+                <Button icon={<IconFolder />} onClick={() => fileInputRef.current?.click()}>{t('settings.backupRestoreFromZip')}</Button>
+              </div>
+            </SegmentPart>
+          </div>
+        </TabPane>
+      </Tabs>
+
+      <Modal
+        title={t('settings.restoreModalTitle')}
+        visible={restoreModalVisible}
+        onCancel={() => setRestoreModalVisible(false)}
+        onOk={restoreBackup}
+        okText={restoreInfo?.compatible ? t('settings.restoreNow') : t('settings.restoreAnyway')}
+        okType={restoreInfo?.compatible ? 'primary' : 'danger'}
+        confirmLoading={restoreBusy}
+      >
+        <Banner
+          type={restoreInfo?.severity === 'danger' ? 'danger' : restoreInfo?.severity === 'warning' ? 'warning' : 'success'}
+          fullMode={false}
+          closeIcon={null}
+          description={restoreInfo?.message}
+        />
+      </Modal>
     </div>
   );
-};
-
-export default GeneralSettings;
+}

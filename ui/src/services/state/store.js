@@ -54,16 +54,6 @@ export const useFredyState = create(
             }
           },
         },
-        notificationAdapter: {
-          async getAdapter() {
-            try {
-              const response = await xhrGet('/api/jobs/notificationAdapter');
-              set(() => ({ notificationAdapter: Object.freeze([...response.json]) }));
-            } catch (Exception) {
-              console.error(`Error while trying to get resource for api/jobs/notificationAdapter. Error:`, Exception);
-            }
-          },
-        },
         generalSettings: {
           async getGeneralSettings() {
             try {
@@ -118,14 +108,6 @@ export const useFredyState = create(
               console.error('Error while trying to get resource for api/jobs/data. Error:', Exception);
             }
           },
-          async getSharableUserList() {
-            try {
-              const response = await xhrGet('/api/jobs/shareableUserList');
-              set((state) => ({ jobsData: { ...state.jobsData, shareableUserList: Object.freeze(response.json) } }));
-            } catch (Exception) {
-              console.error(`Error while trying to get resource for api/jobs. Error:`, Exception);
-            }
-          },
           setJobRunning(jobId, running) {
             if (!jobId) return;
             set((state) => {
@@ -139,14 +121,6 @@ export const useFredyState = create(
           },
         },
         user: {
-          async getUsers() {
-            try {
-              const response = await xhrGet('/api/admin/users');
-              set((state) => ({ user: { ...state.user, users: response.json } }));
-            } catch (Exception) {
-              console.error('Error while trying to get resource for api/admin/users. Error:', Exception);
-            }
-          },
           async getCurrentUser() {
             try {
               const response = await xhrGet('/api/login/user');
@@ -161,47 +135,6 @@ export const useFredyState = create(
            */
           async resetCurrentUser() {
             set((state) => ({ user: { ...state.user, currentUser: {} } }));
-          },
-        },
-        demoMode: {
-          async getDemoMode() {
-            try {
-              const response = await xhrGet('/api/demo');
-              set((state) => ({
-                demoMode: { ...state.demoMode, demoMode: response.json.demoMode },
-              }));
-            } catch (Exception) {
-              console.error('Error while trying to get resource for api/demo. Error:', Exception);
-            }
-          },
-        },
-        versionUpdate: {
-          async getVersionUpdate() {
-            try {
-              const response = await xhrGet('/api/version');
-              set((state) => ({
-                versionUpdate: { ...state.versionUpdate, versionUpdate: response.json },
-              }));
-            } catch (Exception) {
-              console.error('Error while trying to get resource for api/version. Error:', Exception);
-            }
-          },
-        },
-        tracking: {
-          async getTrackingPois() {
-            try {
-              const response = await xhrGet('/api/tracking/trackingPois');
-              set((state) => ({ tracking: { ...state.tracking, pois: Object.freeze(response.json) } }));
-            } catch (Exception) {
-              console.error('Error while trying to get resource for api/tracking. Error:', Exception);
-            }
-          },
-          async trackPoi(poi) {
-            try {
-              await xhrPost('/api/tracking/poi', { poi });
-            } catch (Exception) {
-              console.error('Error while trying to track poi. Error:', Exception);
-            }
           },
         },
         listingsData: {
@@ -303,20 +236,6 @@ export const useFredyState = create(
               set((state) => ({ userSettings: { ...state.userSettings, loaded: true } }));
             }
           },
-          async setNewsHash(newsHash) {
-            try {
-              await xhrPost('/api/user/settings/news-hash', { news_hash: newsHash });
-              set((state) => ({
-                userSettings: {
-                  ...state.userSettings,
-                  settings: { ...state.userSettings.settings, news_hash: newsHash },
-                },
-              }));
-            } catch (Exception) {
-              console.error('Error while trying to update news hash. Error:', Exception);
-              throw Exception;
-            }
-          },
           async setHomeAddress(address) {
             try {
               const response = await xhrPost('/api/user/settings/home-address', { home_address: address });
@@ -400,7 +319,6 @@ export const useFredyState = create(
       // Initial state
       const initial = {
         dashboard: { data: null },
-        notificationAdapter: [],
         listingsData: {
           totalNumber: 0,
           page: 1,
@@ -411,28 +329,20 @@ export const useFredyState = create(
         },
         generalSettings: { settings: {} },
         userSettings: { settings: {}, loaded: false },
-        demoMode: { demoMode: false },
-        versionUpdate: {},
-        tracking: { pois: {} },
         provider: [],
         jobsData: {
           jobs: [],
-          shareableUserList: [],
           totalNumber: 0,
           page: 1,
           result: [],
         },
-        user: { users: [], currentUser: null },
+        user: { currentUser: null },
       };
 
       // Expose actions by grouping them per slice
       const actions = {
         dashboard: { ...effects.dashboard },
-        notificationAdapter: { ...effects.notificationAdapter },
         generalSettings: { ...effects.generalSettings },
-        demoMode: { ...effects.demoMode },
-        versionUpdate: { ...effects.versionUpdate },
-        tracking: { ...effects.tracking },
         listingsData: { ...effects.listingsData },
         provider: { ...effects.provider },
         jobsData: { ...effects.jobsData },
@@ -486,7 +396,7 @@ export function useSelector(selector, equalityFn = shallow) {
 /**
  * Actions hook returning grouped async actions per slice.
  * Example: const { jobs } = useActions(); await jobs.getJobs();
- * @returns {{notificationAdapter: any, generalSettings: any, demoMode: any, provider: any, jobs: any, user: any}}
+ * @returns {{generalSettings: any, provider: any, jobs: any, user: any}}
  */
 export function useActions() {
   return useFredyState((s) => s.__actions.actions);

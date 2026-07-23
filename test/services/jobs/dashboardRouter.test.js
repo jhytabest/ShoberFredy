@@ -16,7 +16,6 @@ describe('api/routes/dashboardRouter.js', () => {
     const jobStoragePath = path.join(ROOT, 'lib', 'services', 'storage', 'jobStorage.js');
     const listingsStoragePath = path.join(ROOT, 'lib', 'services', 'storage', 'listingsStorage.js');
     const settingsStoragePath = path.join(ROOT, 'lib', 'services', 'storage', 'settingsStorage.js');
-    const securityPath = path.join(ROOT, 'lib', 'api', 'security.js');
 
     vi.resetModules();
     vi.doMock(jobStoragePath, () => ({
@@ -28,9 +27,6 @@ describe('api/routes/dashboardRouter.js', () => {
     }));
     vi.doMock(settingsStoragePath, () => ({
       getSettings: async () => ({ interval: 30 }),
-    }));
-    vi.doMock(securityPath, () => ({
-      isAdmin: () => state.admin,
     }));
 
     const mod = await import(path.join(ROOT, 'lib', 'api', 'routes', 'dashboardRouter.js'));
@@ -47,7 +43,6 @@ describe('api/routes/dashboardRouter.js', () => {
   beforeEach(() => {
     state = {
       currentUser: 'u1',
-      admin: false,
       jobs: [],
     };
   });
@@ -57,7 +52,7 @@ describe('api/routes/dashboardRouter.js', () => {
     app = null;
   });
 
-  it('derives lastRun from the most recent accessible job for a regular user', async () => {
+  it('derives lastRun from the most recent job', async () => {
     state.jobs = [
       { id: 'a', userId: 'u1', shared_with_user: [], lastRunAt: 1000 },
       { id: 'b', userId: 'u1', shared_with_user: [], lastRunAt: 5000 },
@@ -68,37 +63,14 @@ describe('api/routes/dashboardRouter.js', () => {
     const res = await app.inject({ method: 'GET', url: '/api/dashboard/' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.general.lastRun).toBe(5000);
-    expect(body.general.nextRun).toBe(5000 + 30 * 60000);
+    expect(body.general.lastRun).toBe(9999);
+    expect(body.general.nextRun).toBe(9999 + 30 * 60000);
   });
 
-  it('includes shared jobs in the lastRun calculation', async () => {
-    state.jobs = [
-      { id: 'mine', userId: 'u1', shared_with_user: [], lastRunAt: 1000 },
-      { id: 'shared', userId: 'someone-else', shared_with_user: ['u1'], lastRunAt: 4000 },
-    ];
-    app = await buildApp();
-
-    const res = await app.inject({ method: 'GET', url: '/api/dashboard/' });
-    expect(res.json().general.lastRun).toBe(4000);
-  });
-
-  it('admins see lastRun across all jobs', async () => {
-    state.admin = true;
-    state.jobs = [
-      { id: 'a', userId: 'someone', shared_with_user: [], lastRunAt: 1000 },
-      { id: 'b', userId: 'another', shared_with_user: [], lastRunAt: 7000 },
-    ];
-    app = await buildApp();
-
-    const res = await app.inject({ method: 'GET', url: '/api/dashboard/' });
-    expect(res.json().general.lastRun).toBe(7000);
-  });
-
-  it('returns null lastRun and 0 nextRun when no accessible job has ever run', async () => {
+  it('returns null lastRun and 0 nextRun when no job has ever run', async () => {
     state.jobs = [
       { id: 'a', userId: 'u1', shared_with_user: [], lastRunAt: null },
-      { id: 'b', userId: 'someone-else', shared_with_user: [], lastRunAt: 9999 },
+      { id: 'b', userId: 'u1', shared_with_user: [], lastRunAt: null },
     ];
     app = await buildApp();
 

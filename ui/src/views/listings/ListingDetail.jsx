@@ -31,8 +31,6 @@ import {
   IconBriefcase,
   IconActivity,
   IconLink,
-  IconStar,
-  IconStarStroked,
   IconDelete,
   IconExpand,
   IconGridView,
@@ -43,7 +41,7 @@ import no_image from '../../assets/no_image.png';
 import * as timeService from '../../services/time/timeService.js';
 import { formatEuroPrice } from '../../services/price/priceService.js';
 import { distanceMeters, getBoundsFromCoords } from './mapUtils.js';
-import { xhrPost, xhrDelete } from '../../services/xhr.js';
+import { xhrDelete } from '../../services/xhr.js';
 import ListingDeletionModal from '../../components/ListingDeletionModal.jsx';
 
 import Headline from '../../components/headline/Headline.jsx';
@@ -281,19 +279,6 @@ export default function ListingDetail() {
     }
   };
 
-  const handleWatch = async () => {
-    try {
-      await xhrPost('/api/listings/watch', { listingId: listing.id });
-      Toast.success(
-        listing.isWatched === 1 ? t('listing.detail.toastWatchlistRemoved') : t('listing.detail.toastWatchlistAdded'),
-      );
-      actions.listingsData.getListing(listingId);
-    } catch (e) {
-      console.error('Failed to operate Watchlist:', e);
-      Toast.error(t('listing.detail.toastWatchlistError'));
-    }
-  };
-
   const handleStatusChange = async (next) => {
     try {
       await actions.listingsData.setListingStatus(listing.id, next);
@@ -420,14 +405,6 @@ export default function ListingDetail() {
             )}
           </Space>
           <Space wrap className="listing-detail__header-actions">
-            <Button
-              icon={listing.isWatched === 1 ? <IconStar /> : <IconStarStroked />}
-              onClick={handleWatch}
-              theme="borderless"
-              className={`listing-detail__watch-btn${listing.isWatched === 1 ? ' listing-detail__watch-btn--active' : ''}`}
-            >
-              {listing.isWatched === 1 ? t('listing.detail.watched') : t('listing.detail.watch')}
-            </Button>
             <StatusControl status={listing.status?.status ?? null} onChange={handleStatusChange} />
             <a href={listing.link} target="_blank" rel="noopener noreferrer" className="listing-detail__open-btn">
               <IconLink style={{ marginRight: 6 }} />

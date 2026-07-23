@@ -5,8 +5,7 @@
 
 import { Fragment, useState, useCallback } from 'react';
 
-import NotificationAdapterMutator from './components/notificationAdapter/NotificationAdapterMutator';
-import NotificationAdapterTable from '../../../components/table/NotificationAdapterTable';
+import TelegramSettings from './components/telegram/TelegramSettings.jsx';
 import ProviderTable from '../../../components/table/ProviderTable';
 import ProviderMutator from './components/provider/ProviderMutator';
 import AreaFilter from './components/areaFilter/AreaFilter';
@@ -14,7 +13,7 @@ import Headline from '../../../components/headline/Headline';
 import { useActions, useSelector } from '../../../services/state/store';
 import { xhrPost } from '../../../services/xhr';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Divider, Input, Switch, Button, TagInput, Toast, Select } from '@douyinfe/semi-ui-19';
+import { Divider, Input, Switch, Button, TagInput, Toast } from '@douyinfe/semi-ui-19';
 import './JobMutation.less';
 import { SegmentPart } from '../../../components/segment/SegmentPart';
 import {
@@ -24,7 +23,6 @@ import {
   IconPaperclip,
   IconPlayCircle,
   IconPlusCircle,
-  IconUser,
   IconFilter,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from '../../../services/i18n/i18n.jsx';
@@ -39,7 +37,6 @@ export default function JobMutator() {
   ];
 
   const jobs = useSelector((state) => state.jobsData.jobs);
-  const shareableUserList = useSelector((state) => state.jobsData.shareableUserList);
   const params = useParams();
   const location = useLocation();
 
@@ -52,21 +49,17 @@ export default function JobMutator() {
   const defaultBlacklist = sourceJob?.blacklist || [];
   const defaultName = jobToClone ? `Copy of - ${sourceJob?.name}` : sourceJob?.name || null;
   const defaultProviderData = sourceJob?.provider || [];
-  const defaultNotificationAdapter = sourceJob?.notificationAdapter || [];
+  const defaultTelegram = sourceJob?.notificationAdapter?.find((adapter) => adapter.id === 'telegram') || null;
   const defaultEnabled = sourceJob?.enabled ?? true;
-  const defaultShareWithUsers = sourceJob?.shared_with_user ?? [];
   const defaultSpatialFilter = sourceJob?.spatialFilter || null;
   const defaultSpecFilter = sourceJob?.specFilter || null;
 
   const [providerToEdit, setProviderToEdit] = useState(null);
   const [providerCreationVisible, setProviderCreationVisibility] = useState(false);
-  const [notificationCreationVisible, setNotificationCreationVisibility] = useState(false);
-  const [editNotificationAdapter, setEditNotificationAdapter] = useState(null);
   const [providerData, setProviderData] = useState(defaultProviderData);
   const [name, setName] = useState(defaultName);
   const [blacklist, setBlacklist] = useState(defaultBlacklist);
-  const [notificationAdapterData, setNotificationAdapterData] = useState(defaultNotificationAdapter);
-  const [shareWithUsers, setShareWithUsers] = useState(defaultShareWithUsers);
+  const [telegram, setTelegram] = useState(defaultTelegram);
   const [enabled, setEnabled] = useState(defaultEnabled);
   const [spatialFilter, setSpatialFilter] = useState(defaultSpatialFilter);
   const [specFilter, setSpecFilter] = useState(defaultSpecFilter);
@@ -85,7 +78,7 @@ export default function JobMutator() {
   };
 
   const isSavingEnabled = () => {
-    return Boolean(notificationAdapterData.length && providerData.length && name);
+    return Boolean(telegram?.fields?.token?.trim() && telegram?.fields?.chatId?.trim() && providerData.length && name);
   };
 
   const handleProviderEdit = (data) => {
@@ -98,8 +91,7 @@ export default function JobMutator() {
     try {
       await xhrPost('/api/jobs', {
         provider: providerData,
-        notificationAdapter: notificationAdapterData,
-        shareWithUsers,
+        notificationAdapter: [telegram],
         name,
         blacklist,
         spatialFilter,
@@ -127,26 +119,6 @@ export default function JobMutator() {
         onEditData={handleProviderEdit}
         providerToEdit={providerToEdit}
       />
-
-      {notificationCreationVisible && (
-        <NotificationAdapterMutator
-          visible={notificationCreationVisible}
-          onVisibilityChanged={(visible) => {
-            setEditNotificationAdapter(null);
-            setNotificationCreationVisibility(visible);
-          }}
-          selected={notificationAdapterData}
-          editNotificationAdapter={
-            editNotificationAdapter == null
-              ? null
-              : notificationAdapterData.find((adapter) => adapter.id === editNotificationAdapter)
-          }
-          onData={(data) => {
-            const oldData = [...notificationAdapterData].filter((o) => o.id !== data.id);
-            setNotificationAdapterData([...oldData, data]);
-          }}
-        />
-      )}
 
       <Headline
         text={jobToBeEdit ? t('jobs.mutation.editTitle') : t('jobs.mutation.createTitle')}
@@ -208,26 +180,7 @@ export default function JobMutator() {
           name={t('jobs.mutation.sectionNotifications')}
           helpText={t('jobs.mutation.notificationsHelp')}
         >
-          <Button
-            type="primary"
-            className="jobMutation__newButton"
-            icon={<IconPlusCircle />}
-            onClick={() => setNotificationCreationVisibility(true)}
-          >
-            {t('jobs.mutation.addNotification')}
-          </Button>
-
-          <NotificationAdapterTable
-            notificationAdapter={notificationAdapterData}
-            onRemove={(adapterId) => {
-              setEditNotificationAdapter(null);
-              setNotificationAdapterData(notificationAdapterData.filter((adapter) => adapter.id !== adapterId));
-            }}
-            onEdit={(adapterId) => {
-              setEditNotificationAdapter(adapterId);
-              setNotificationCreationVisibility(true);
-            }}
-          />
+          <TelegramSettings value={telegram} onChange={setTelegram} />
         </SegmentPart>
         <Divider margin="1rem" />
         <SegmentPart
@@ -268,27 +221,6 @@ export default function JobMutator() {
           helpText={t('jobs.mutation.areaFilterHelp')}
         >
           <AreaFilter spatialFilter={spatialFilter} onChange={handleSpatialFilterChange} />
-        </SegmentPart>
-        <Divider margin="1rem" />
-        <SegmentPart Icon={IconUser} name={t('jobs.mutation.sectionSharing')} helpText={t('jobs.mutation.sharingHelp')}>
-          {shareableUserList.length === 0 ? (
-            <div>{t('jobs.mutation.sharingNoUsers')}</div>
-          ) : (
-            <Select
-              filter
-              multiple
-              placeholder={t('jobs.mutation.sharingSearchPlaceholder')}
-              autoClearSearchValue={false}
-              defaultValue={shareWithUsers}
-              onChange={(value) => setShareWithUsers(value)}
-            >
-              {shareableUserList.map((user) => (
-                <Select.Option value={user.id} key={user.id}>
-                  {user.name}
-                </Select.Option>
-              ))}
-            </Select>
-          )}
         </SegmentPart>
         <Divider margin="1rem" />
         <SegmentPart

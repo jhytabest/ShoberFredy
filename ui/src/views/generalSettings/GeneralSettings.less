@@ -21,6 +21,22 @@
     justify-content: flex-end;
     margin-top: @space-2;
   }
+
+  &__workers {
+    display: grid;
+    gap: @space-2;
+
+    > div {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: @space-3;
+      padding: @space-2 @space-3;
+      border: 1px solid @color-border;
+      border-radius: @radius-chip;
+      background: @color-elevated;
+    }
+  }
 }
 
 // InputNumber fix

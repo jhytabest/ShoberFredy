@@ -10,8 +10,6 @@ import {
   IconDelete,
   IconLink,
   IconMapPin,
-  IconStar,
-  IconStarStroked,
   IconEyeOpened,
 } from '@douyinfe/semi-icons';
 import no_image from '../../../assets/no_image.png';
@@ -22,9 +20,9 @@ import './ListingsGrid.less';
 import { useTranslation, useLocale } from '../../../services/i18n/i18n.jsx';
 
 /**
- * @param {{ listings: object[], onWatch: Function, onNavigate: Function, onDelete: Function, onRestore?: Function, isHiddenView?: boolean, onStatusChange: Function }} props
+ * @param {{ listings: object[], onNavigate: Function, onDelete: Function, onRestore?: Function, isHiddenView?: boolean, onStatusChange: Function }} props
  */
-const ListingsGrid = ({ listings, onWatch, onNavigate, onDelete, onRestore, isHiddenView = false, onStatusChange }) => {
+const ListingsGrid = ({ listings, onNavigate, onDelete, onRestore, isHiddenView = false, onStatusChange }) => {
   const t = useTranslation();
   const locale = useLocale();
   return (
@@ -54,22 +52,6 @@ const ListingsGrid = ({ listings, onWatch, onNavigate, onDelete, onRestore, isHi
                 <span>{t('listings.cardInactive')}</span>
               </div>
             )}
-            <Tooltip
-              content={
-                item.isWatched === 1 ? t('listings.tooltipRemoveFromWatchlist') : t('listings.tooltipAddToWatchlist')
-              }
-            >
-              <button
-                type="button"
-                className="listingsGrid__card__star"
-                onClick={(e) => onWatch(e, item)}
-                aria-label={
-                  item.isWatched === 1 ? t('listings.tooltipRemoveFromWatchlist') : t('listings.tooltipAddToWatchlist')
-                }
-              >
-                {item.isWatched === 1 ? <IconStar /> : <IconStarStroked />}
-              </button>
-            </Tooltip>
           </div>
 
           <div className="listingsGrid__card__body">

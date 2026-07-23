@@ -5,7 +5,7 @@
 
 import { Empty, Table, Button } from '@douyinfe/semi-ui-19';
 import { IconDelete, IconEdit } from '@douyinfe/semi-icons';
-import { Typography } from '@douyinfe/semi-ui';
+import { Typography } from '@douyinfe/semi-ui-19';
 import { useTranslation } from '../../services/i18n/i18n.jsx';
 
 export default function ProviderTable({ providerData = [], onRemove, onEdit } = {}) {

@@ -5,13 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// userStorage is only needed by isAdmin/adminHook - mock it so the suite has no DB dependency.
-vi.mock('../../lib/services/storage/userStorage.js', () => ({
-  getUser: vi.fn(),
-}));
-
-import { getUser } from '../../lib/services/storage/userStorage.js';
-import { isUnauthorized, isAdmin, authHook, adminHook } from '../../lib/api/security.js';
+import { isUnauthorized, authHook } from '../../lib/api/security.js';
 
 const SESSION_MAX_AGE = 2 * 60 * 60 * 1000; // mirrors security.js
 
@@ -75,40 +69,6 @@ describe('authHook', () => {
 
     expect(result).toBeUndefined();
     expect(reply.statusCode).toBeNull();
-    expect(reply.sent).toBe(false);
-  });
-});
-
-describe('isAdmin / adminHook', () => {
-  it('treats an expired session as non-admin without hitting storage', () => {
-    expect(isAdmin({ session: expiredSession() })).toBe(false);
-    expect(getUser).not.toHaveBeenCalled();
-  });
-
-  it('is admin only when the stored user is flagged as admin', () => {
-    getUser.mockReturnValue({ id: 'user-1', isAdmin: true });
-    expect(isAdmin({ session: freshSession() })).toBe(true);
-
-    getUser.mockReturnValue({ id: 'user-1', isAdmin: false });
-    expect(isAdmin({ session: freshSession() })).toBe(false);
-  });
-
-  it('short-circuits with a 401 reply for a non-admin request', async () => {
-    getUser.mockReturnValue({ id: 'user-1', isAdmin: false });
-    const reply = makeReply();
-    const result = await adminHook({ session: freshSession() }, reply);
-
-    expect(result).toBe(reply);
-    expect(reply.statusCode).toBe(401);
-    expect(reply.sent).toBe(true);
-  });
-
-  it('lets an admin request through untouched', async () => {
-    getUser.mockReturnValue({ id: 'user-1', isAdmin: true });
-    const reply = makeReply();
-    const result = await adminHook({ session: freshSession() }, reply);
-
-    expect(result).toBeUndefined();
     expect(reply.sent).toBe(false);
   });
 });

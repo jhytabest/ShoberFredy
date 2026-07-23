@@ -3,13 +3,13 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 
 import cityBackground from '../../assets/city_background.jpg';
 import Logo from '../../components/logo/Logo';
 import { xhrPost } from '../../services/xhr';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useActions, useSelector } from '../../services/state/store';
+import { useActions } from '../../services/state/store';
 import { Input, Button, Banner } from '@douyinfe/semi-ui-19';
 
 import './login.less';
@@ -22,17 +22,8 @@ export default function Login() {
   const [username, setUserName] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState(null);
-  const demoMode = useSelector((state) => state.demoMode.demoMode || false);
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    async function init() {
-      await actions.demoMode.getDemoMode();
-    }
-
-    init();
-  }, []);
 
   const tryLogin = async () => {
     if (!username?.trim() || !password) {
@@ -63,17 +54,6 @@ export default function Login() {
         <div className="login__logoWrapper">
           <Logo width={250} white />
         </div>
-
-        {demoMode && (
-          <Banner
-            fullMode={true}
-            type="info"
-            bordered
-            closeIcon={null}
-            description={t('login.demoBanner')}
-            style={{ marginBottom: '1.5rem' }}
-          />
-        )}
 
         <form onSubmit={(e) => e.preventDefault()}>
           {error && <Banner type="danger" closeIcon={null} description={error} style={{ marginBottom: '1rem' }} />}

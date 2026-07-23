@@ -9,11 +9,9 @@ import Fastify from 'fastify';
 // Mock everything the login route pulls in so the suite has no DB / analytics / config side effects.
 vi.mock('../../lib/services/storage/userStorage.js', () => ({
   getUser: vi.fn(),
-  getUsers: vi.fn(() => []),
+  getUserByUsername: vi.fn(),
   setLastLoginToNow: vi.fn(),
 }));
-vi.mock('../../lib/services/tracking/Tracker.js', () => ({ trackDemoAccessed: vi.fn() }));
-vi.mock('../../lib/services/storage/settingsStorage.js', () => ({ getSettings: vi.fn(async () => ({})) }));
 vi.mock('../../lib/services/logger.js', () => ({ default: { error: vi.fn(), info: vi.fn() } }));
 
 import { getUser } from '../../lib/services/storage/userStorage.js';
@@ -52,7 +50,7 @@ describe('GET /user', () => {
     const res = await app.inject({ method: 'GET', url: '/user' });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ userId: 'user-1', isAdmin: true });
+    expect(res.json()).toEqual({ userId: 'user-1' });
 
     await app.close();
   });

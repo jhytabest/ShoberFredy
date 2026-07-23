@@ -7,10 +7,8 @@ import fs from 'fs';
 import { checkIfConfigIsAccessible, getProviders, refreshConfig } from './lib/utils.js';
 import * as similarityCache from './lib/services/similarity-check/similarityCache.js';
 import { runMigrations } from './lib/services/storage/migrations/migrate.js';
-import { ensureDemoUserExists, ensureAdminUserExists } from './lib/services/storage/userStorage.js';
-import { initTrackerCron } from './lib/services/crons/tracker-cron.js';
+import { ensureAdminUserExists } from './lib/services/storage/userStorage.js';
 import logger from './lib/services/logger.js';
-import { reloadEnabledFromSettings } from './lib/services/debug/debugLogStorage.js';
 import { initActiveCheckerCron } from './lib/services/crons/listing-alive-cron.js';
 import { initDbMaintenanceCron } from './lib/services/crons/db-maintenance-cron.js';
 import { getSettings } from './lib/services/storage/settingsStorage.js';
@@ -62,12 +60,6 @@ if (interruptedAudits)
 
 const settings = await getSettings();
 
-// Restore the persisted on/off flag for opt-in DB log capture so it survives a
-// Fredy restart. reloadEnabledFromSettings() also (un)wires the logger sink based
-// on the restored flag, so the logger hot path stays cost-free when nobody enabled
-// the feature.
-await reloadEnabledFromSettings();
-
 // Ensure the sqlite directory exists before loading anything else (based on config.sqlitepath)
 const { dir: sqliteDir } = await computeDbPath();
 if (!fs.existsSync(sqliteDir)) {
@@ -86,13 +78,7 @@ const INTERVAL = settings.interval * 60 * 1000;
 // Initialize API only after migrations completed
 await import('./lib/api/api.js');
 
-if (settings.demoMode) {
-  logger.info('Running in demo mode');
-}
-
 ensureAdminUserExists();
-ensureDemoUserExists();
-await initTrackerCron();
 //do not wait for this to finish, let it run in the background
 initActiveCheckerCron();
 // Nightly SQLite maintenance: checkpoint the WAL and bound the retained

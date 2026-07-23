@@ -14,7 +14,7 @@ import './Navigate.less';
 import { useScreenWidth } from '../../hooks/screenWidth.js';
 import { useTranslation } from '../../services/i18n/i18n.jsx';
 
-export default function Navigation({ isAdmin }) {
+export default function Navigation() {
   const t = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,35 +38,20 @@ export default function Navigation({ isAdmin }) {
       items: [
         { itemKey: '/listings', text: t('nav.listingsOverview') },
         { itemKey: '/map', text: t('nav.mapView') },
-        { itemKey: '/listings/watchlist', text: t('nav.watchlist') },
       ],
     },
   ];
 
-  if (isAdmin) {
-    items.push({
-      itemKey: 'settings',
-      text: t('nav.settings'),
-      icon: <IconSetting />,
-      items: [
-        { itemKey: '/users', text: t('nav.userManagement') },
-        { itemKey: '/generalSettings', text: t('nav.settingsPage') },
-      ],
-    });
-  } else {
-    items.push({
-      itemKey: 'settings',
-      text: t('nav.settings'),
-      icon: <IconSetting />,
-      items: [{ itemKey: '/generalSettings', text: t('nav.settingsPage') }],
-    });
-  }
+  items.push({
+    itemKey: 'settings',
+    text: t('nav.settings'),
+    icon: <IconSetting />,
+    items: [{ itemKey: '/generalSettings', text: t('nav.settingsPage') }],
+  });
 
   function parsePathName(name) {
     // Collect every leaf itemKey that looks like a route (starts with '/').
-    // Prefer the longest exact-prefix match so nested routes like
-    // '/listings/watchlist' resolve to themselves instead of being collapsed
-    // to '/listings'.
+    // Prefer the longest exact-prefix match for nested routes.
     const allKeys = [];
     const collect = (nodes) => {
       for (const n of nodes) {

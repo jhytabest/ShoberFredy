@@ -42,14 +42,13 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-# Verify the DB is readable/writable via the API.
-# /api/demo is unauthenticated and reads the settings table - if SQLite is broken this returns an error.
-echo "Testing DB via API (/api/demo)..."
-DEMO_RESPONSE=$(docker exec fredy curl -sf http://localhost:9998/api/demo 2>&1)
-if echo "$DEMO_RESPONSE" | grep -q "demoMode"; then
-  echo "DB is readable (got demoMode from /api/demo)"
+# Verify the runtime and database through the public health endpoint.
+echo "Testing runtime health..."
+HEALTH_RESPONSE=$(docker exec fredy curl -sf http://localhost:9998/health 2>&1)
+if echo "$HEALTH_RESPONSE" | grep -q '"status":"ok"'; then
+  echo "Runtime and database are healthy"
 else
-  echo "DB check failed - unexpected response from /api/demo: $DEMO_RESPONSE"
+  echo "Runtime health check failed: $HEALTH_RESPONSE"
   docker logs fredy
   exit 1
 fi

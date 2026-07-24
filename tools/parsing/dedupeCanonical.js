@@ -385,15 +385,24 @@ function providerListingIdentity(value) {
   if (!value) return null;
   try {
     const url = new URL(value);
+    const host = url.hostname.toLowerCase();
     const path = url.pathname;
-    const immoscout = path.match(/\/expose\/(\d+)/iu)?.[1];
-    if (immoscout) return `immoscout:${immoscout}`;
-    const immowelt = path.match(/\/expose\/([a-f0-9-]{20,})/iu)?.[1];
-    if (immowelt) return `immowelt:${immowelt.toLowerCase()}`;
-    const wg = url.searchParams.get('asset_id') || path.match(/\.(\d+)\.html$/u)?.[1];
-    if (wg) return `wgGesucht:${wg}`;
-    const kleinanzeigen = path.match(/\/(\d+-\d+-\d+)(?:\/|$)/u)?.[1];
-    if (kleinanzeigen) return `kleinanzeigen:${kleinanzeigen}`;
+    if (/(?:^|\.)immobilienscout24\.de$/u.test(host)) {
+      const id = path.match(/\/expose\/(\d{6,})(?:\/|$)/u)?.[1];
+      if (id) return `immoscout:${id}`;
+    }
+    if (/(?:^|\.)immowelt\.de$/u.test(host)) {
+      const id = path.match(/\/expose\/([a-z0-9-]{8,})(?:\/|$)/iu)?.[1];
+      if (id) return `immowelt:${id.toLowerCase()}`;
+    }
+    if (/(?:^|\.)wg-gesucht\.de$/u.test(host)) {
+      const id = url.searchParams.get('asset_id') || path.match(/\.(\d{5,})\.html$/u)?.[1];
+      if (id) return `wgGesucht:${id}`;
+    }
+    if (/(?:^|\.)kleinanzeigen\.de$/u.test(host)) {
+      const id = path.match(/\/(\d+-\d+-\d+)(?:\/|$)/u)?.[1];
+      if (id) return `kleinanzeigen:${id}`;
+    }
   } catch {
     // Keep malformed historical URLs out of the provider-ID tier.
   }

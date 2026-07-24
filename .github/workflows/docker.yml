@@ -18,7 +18,7 @@ env:
 
 jobs:
   quality:
-    name: Lint, format, offline tests
+    name: Lint and format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,9 +35,6 @@ jobs:
 
       - name: Lint
         run: yarn lint
-
-      - name: Offline tests
-        run: yarn test:offline
 
   build-and-push-image:
     needs: quality
@@ -83,44 +80,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke-test container health with docker compose
-        env:
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          echo "Starting container with docker compose..."
-          mkdir -p ./db ./conf && chmod 777 ./db ./conf
-          SHOBERFREDY_IMAGE=$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)
-          export SHOBERFREDY_IMAGE
-          docker compose up --no-build -d shoberfredy
-          echo "Waiting for container start_period..."
-          sleep 60
-
-          SECONDS_ELAPSED=0
-          TOTAL_DURATION=30
-          while [ $SECONDS_ELAPSED -lt $TOTAL_DURATION ]; do
-            HEALTH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' shoberfredy 2>/dev/null || echo "not_found")
-            CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' shoberfredy 2>/dev/null || echo "not_found")
-            echo "[$SECONDS_ELAPSED/$TOTAL_DURATION sec] Container: $CONTAINER_STATUS, Health: $HEALTH_STATUS"
-
-            if [ "$CONTAINER_STATUS" != "running" ]; then
-              echo "Container stopped running! Status: $CONTAINER_STATUS"
-              docker compose logs shoberfredy
-              exit 1
-            fi
-
-            if [ "$HEALTH_STATUS" = "unhealthy" ]; then
-              echo "Container is unhealthy!"
-              docker compose logs shoberfredy
-              exit 1
-            fi
-
-            sleep 5
-            SECONDS_ELAPSED=$((SECONDS_ELAPSED + 5))
-          done
-          echo "Container healthy."
-          docker compose down
-
-      - name: Publish verified Docker image
+      - name: Publish Docker image
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |

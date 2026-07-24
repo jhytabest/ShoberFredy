@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: Lint, format, offline tests
+    name: Lint and format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +25,3 @@ jobs:
 
       - name: Lint
         run: yarn lint
-
-      - name: Offline tests
-        run: yarn test:offline

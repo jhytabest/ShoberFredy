@@ -21,7 +21,7 @@ function extractFileNameFromDisposition(disposition) {
   return decodeURIComponent(match?.[1] || match?.[2] || 'FredyBackup.zip');
 }
 
-export class BackupRestoreClient {
+class BackupRestoreClient {
   /**
    * Trigger a backup download and save it using the filename provided by the server.
    * @returns {Promise<void>}

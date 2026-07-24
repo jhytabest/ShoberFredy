@@ -11,12 +11,12 @@ import { fixMapboxDrawCompatibility, addDrawingControl, setupAreaFilterEventList
 import { getBoundsFromCoords } from '../../views/listings/mapUtils.js';
 import './Map.less';
 
-export const GERMANY_BOUNDS = [
+const GERMANY_BOUNDS = [
   [5.866, 47.27], // Southwest coordinates
   [15.042, 55.059], // Northeast coordinates
 ];
 
-export const STYLES = {
+const STYLES = {
   STANDARD: 'https://tiles.openfreemap.org/styles/bright',
   SATELLITE: {
     version: 8,

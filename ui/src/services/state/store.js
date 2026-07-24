@@ -39,7 +39,7 @@ const loadingTracker = (config) => (set, get, api) => {
 };
 
 // Create the Zustand store with slices and actions
-export const useFredyState = create(
+const useFredyState = create(
   logger(
     loadingTracker((set) => {
       // Async actions that directly set state (no separate reducer concept)

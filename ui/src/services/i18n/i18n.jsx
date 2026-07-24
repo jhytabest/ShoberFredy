@@ -132,5 +132,4 @@ export function useLocale() {
   return context.locale;
 }
 
-// Export resources and availableLanguages for other uses
-export { resources, availableLanguages };
+export { availableLanguages };

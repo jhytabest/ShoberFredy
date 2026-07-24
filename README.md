@@ -392,32 +392,6 @@ yarn run start:frontend:dev
 
 You should now be able to access _Fredy_ from your browser. Check your Terminal to see what port the frontend is running on.
 
-### Run Tests
-
-## "Online" tests
-
-These tests are directly executed against the actual providers.
-
-```bash
-yarn run test
-```
-
-## "Offline" tests
-
-These tests are using the test fixtures instead of the actual providers. Much faster and "good enough" to test the core functionality.
-
-```bash
-yarn run test:offline
-```
-
-## Download new fixtures
-
-If you have to refresh the fixtures (every once in a while needed because the providers change their code), run this command:
-
-```bash
-yarn run download-fixtures
-```
-
 ## Adding a new language
 
 Fredy's UI is fully multilingual. Translation files live in `ui/src/locales/`. To add a new language, create a single JSON file there, no code changes required.

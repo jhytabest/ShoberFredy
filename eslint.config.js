@@ -25,15 +25,8 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.node,
-        ...globals.jest,
         Promise: 'readonly',
         fetch: 'readonly',
-        describe: 'readonly',
-        after: 'readonly',
-        it: 'readonly',
-        beforeEach: 'readonly',
-        afterEach: 'readonly',
-        vi: 'readonly',
       },
     },
     plugins: { react },
@@ -46,7 +39,7 @@ export default [
 
   // Standalone CLIs/daemons report via stdout by design.
   {
-    files: ['tools/market/**/*.js', 'tools/migrate/**/*.js', 'tools/pipeline/**/*.js'],
+    files: ['tools/market/**/*.js', 'tools/migrate/**/*.js'],
     rules: {
       'no-console': 'off',
     },

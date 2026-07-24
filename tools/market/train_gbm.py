@@ -153,11 +153,10 @@ def main():
     if not params_splits or not calib_splits:
         raise ValueError("not enough rows per fold to cross-validate")
 
-    # Optional grid overrides (used by tests to keep runtimes short).
-    num_leaves_grid = payload.get("numLeavesGrid") or NUM_LEAVES_GRID
-    min_data_grid = payload.get("minDataGrid") or MIN_DATA_IN_LEAF_GRID
-    half_life_grid = payload.get("halfLifeGrid") or HALF_LIFE_GRID_DAYS
-    max_rounds = int(payload.get("maxRounds") or MAX_ROUNDS)
+    num_leaves_grid = NUM_LEAVES_GRID
+    min_data_grid = MIN_DATA_IN_LEAF_GRID
+    half_life_grid = HALF_LIFE_GRID_DAYS
+    max_rounds = MAX_ROUNDS
 
     # 1. Grid search on the median model.
     best = None

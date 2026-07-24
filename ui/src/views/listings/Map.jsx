@@ -5,13 +5,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { parseBoolean, parseNumber, parseString, useSearchParamState } from '../../hooks/useSearchParamState.js';
-import { renderToString } from 'react-dom/server';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useActions, useSelector } from '../../services/state/store.js';
-import { distanceMeters, generateCircleCoords, getBoundsFromCenter, getBoundsFromCoords } from './mapUtils.js';
+import { generateCircleCoords, getBoundsFromCenter, getBoundsFromCoords } from './mapUtils.js';
 import { Banner, Select, Switch, Toast, Typography } from '@douyinfe/semi-ui-19';
-import { IconDelete, IconEyeOpened, IconLink } from '@douyinfe/semi-icons';
 
 import no_image from '../../assets/no_image.png';
 import _RangeSlider from 'react-range-slider-input';
@@ -32,7 +30,6 @@ export default function MapView() {
   const t = useTranslation();
   const mapContainer = useRef(null);
   const map = useRef(null);
-  const markers = useRef([]);
   const homeMarker = useRef(null);
   const actions = useActions();
   const navigate = useNavigate();
@@ -48,6 +45,7 @@ export default function MapView() {
   const [jobId, setJobId] = useSearchParamState(sp, 'job', null, parseString);
   const [distanceFilter, setDistanceFilter] = useSearchParamState(sp, 'distance', 0, parseNumber);
   const [style] = useSearchParamState(sp, 'style', 'STANDARD', parseString);
+  const [marketModel, setMarketModel] = useSearchParamState(sp, 'model', 'gbm', parseString);
   const [show3dBuildings, setShow3dBuildings] = useSearchParamState(sp, 'buildings', false, parseBoolean);
 
   // Price range: stored as priceMin/priceMax URL params; default max derived from loaded listings
@@ -229,30 +227,92 @@ export default function MapView() {
   useEffect(() => {
     if (!map.current) return;
 
-    markers.current.forEach((marker) => marker.remove());
-    markers.current = [];
-
     if (homeMarker.current) {
       homeMarker.current.remove();
       homeMarker.current = null;
     }
 
     if (homeAddress?.coords) {
+      const homePopup = document.createElement('div');
+      homePopup.className = 'map-popup-content';
+      const homeTitle = document.createElement('h4');
+      homeTitle.textContent = t('map.popupHomeAddress');
+      const homeText = document.createElement('p');
+      homeText.textContent = homeAddress.address;
+      homePopup.append(homeTitle, homeText);
       homeMarker.current = new maplibregl.Marker({ color: 'red' })
         .setLngLat([homeAddress.coords.lng, homeAddress.coords.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
-            `<div class="map-popup-content"><h4>${t('map.popupHomeAddress')}</h4><p>${homeAddress.address}</p></div>`,
-          ),
-        )
+        .setPopup(new maplibregl.Popup({ offset: 25 }).setDOMContent(homePopup))
         .addTo(map.current);
     }
 
-    const addCircleLayer = () => {
+    const buildListingPopup = (listing) => {
+      const root = document.createElement('div');
+      root.className = 'map-popup-content';
+
+      const image = document.createElement('img');
+      image.src = listing.image_url || no_image;
+      image.alt = '';
+      image.addEventListener('error', () => {
+        image.src = no_image;
+      });
+      const title = document.createElement('h4');
+      title.textContent = listing.title || t('common.na');
+      const info = document.createElement('div');
+      info.className = 'info';
+      const selectedDelta = Number(listing[`${marketModel}_delta_percent`]);
+      const fairPrice = Number(listing[`${marketModel}_fair_price_per_sqm`]);
+      const facts = [
+        [t('map.popupPrice'), listing.price ? `${listing.price} €` : t('common.na')],
+        [t('map.popupAddress'), listing.address || t('common.na')],
+        [t('map.popupJob'), listing.job_name || t('common.na')],
+        [t('map.popupProvider'), listing.provider || t('common.na')],
+        [t('map.popupSize'), listing.size != null ? `${listing.size} m²` : t('common.na')],
+        ['Fair', Number.isFinite(fairPrice) ? `${fairPrice.toFixed(1)} €/m²` : t('common.na')],
+        ['Delta', Number.isFinite(selectedDelta) ? `${selectedDelta.toFixed(1)}%` : t('common.na')],
+      ];
+      for (const [label, value] of facts) {
+        const line = document.createElement('span');
+        const strong = document.createElement('strong');
+        strong.textContent = `${label}: `;
+        line.append(strong, document.createTextNode(String(value)));
+        info.append(line);
+      }
+
+      const actionsRow = document.createElement('div');
+      actionsRow.className = 'map-popup-content__actions';
+      const external = document.createElement('a');
+      external.className = 'map-popup-content__linkButton';
+      external.href = listing.link || '#';
+      external.target = '_blank';
+      external.rel = 'noopener noreferrer';
+      external.textContent = '↗';
+      const details = document.createElement('button');
+      details.className = 'map-popup-content__detailsButton';
+      details.type = 'button';
+      details.textContent = t('map.popupViewDetails');
+      details.addEventListener('click', () => navigate(`/listings/listing/${listing.id}`));
+      const remove = document.createElement('button');
+      remove.className = 'map-popup-content__deleteButton';
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = t('map.popupRemove');
+      remove.addEventListener('click', () => deleteListingRef.current(listing.id));
+      actionsRow.append(external, details, remove);
+      info.append(actionsRow);
+      root.append(image, title, info);
+      return root;
+    };
+
+    const addMapLayers = () => {
       if (!map.current || !map.current.isStyleLoaded()) return;
       if (map.current.getLayer('distance-circle')) map.current.removeLayer('distance-circle');
       if (map.current.getLayer('distance-circle-outline')) map.current.removeLayer('distance-circle-outline');
       if (map.current.getSource('distance-circle-source')) map.current.removeSource('distance-circle-source');
+      for (const layerId of ['listing-cluster-count', 'listing-clusters', 'listing-points']) {
+        if (map.current.getLayer(layerId)) map.current.removeLayer(layerId);
+      }
+      if (map.current.getSource('listings-source')) map.current.removeSource('listings-source');
 
       if (distanceFilter > 0 && homeAddress?.coords) {
         const ret = generateCircleCoords([homeAddress.coords.lng, homeAddress.coords.lat], distanceFilter);
@@ -288,90 +348,136 @@ export default function MapView() {
           },
         });
       }
+
+      const features = filterListings()
+        .filter(
+          (listing) =>
+            listing.latitude != null &&
+            listing.longitude != null &&
+            listing.latitude !== -1 &&
+            listing.longitude !== -1,
+        )
+        .map((listing) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [listing.longitude, listing.latitude] },
+          properties: {
+            id: listing.id,
+            delta: Number.isFinite(Number(listing[`${marketModel}_delta_percent`]))
+              ? Number(listing[`${marketModel}_delta_percent`])
+              : null,
+          },
+        }));
+      map.current.addSource('listings-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 44,
+      });
+      map.current.addLayer({
+        id: 'listing-clusters',
+        type: 'circle',
+        source: 'listings-source',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': ['step', ['get', 'point_count'], '#5b8ff9', 10, '#7067cf', 30, '#9b5de5'],
+          'circle-radius': ['step', ['get', 'point_count'], 17, 10, 22, 30, 28],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      });
+      map.current.addLayer({
+        id: 'listing-cluster-count',
+        type: 'symbol',
+        source: 'listings-source',
+        filter: ['has', 'point_count'],
+        layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 },
+        paint: { 'text-color': '#ffffff' },
+      });
+      map.current.addLayer({
+        id: 'listing-points',
+        type: 'circle',
+        source: 'listings-source',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': [
+            'case',
+            ['==', ['get', 'delta'], null],
+            '#718096',
+            [
+              'interpolate',
+              ['linear'],
+              ['get', 'delta'],
+              -30,
+              '#16864b',
+              -10,
+              '#62a86b',
+              0,
+              '#e5b94b',
+              10,
+              '#e17c45',
+              30,
+              '#c83e4d',
+            ],
+          ],
+          'circle-radius': 7,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': 0.92,
+        },
+      });
     };
 
-    const updateLayers = () => {
-      addCircleLayer();
+    const onClusterClick = (event) => {
+      const feature = map.current.queryRenderedFeatures(event.point, { layers: ['listing-clusters'] })[0];
+      if (!feature) return;
+      map.current
+        .getSource('listings-source')
+        .getClusterExpansionZoom(feature.properties.cluster_id)
+        .then((zoom) => map.current.easeTo({ center: feature.geometry.coordinates, zoom }));
     };
+    const byId = new globalThis.Map(listings.map((listing) => [String(listing.id), listing]));
+    const onListingClick = (event) => {
+      const feature = event.features?.[0];
+      const listing = byId.get(String(feature?.properties?.id));
+      if (!listing) return;
+      new maplibregl.Popup({ offset: 12 })
+        .setLngLat(feature.geometry.coordinates)
+        .setDOMContent(buildListingPopup(listing))
+        .addTo(map.current);
+    };
+    const pointerOn = () => {
+      map.current.getCanvas().style.cursor = 'pointer';
+    };
+    const pointerOff = () => {
+      map.current.getCanvas().style.cursor = '';
+    };
+    const registerInteractions = () => {
+      map.current.on('click', 'listing-clusters', onClusterClick);
+      map.current.on('click', 'listing-points', onListingClick);
+      map.current.on('mouseenter', 'listing-clusters', pointerOn);
+      map.current.on('mouseleave', 'listing-clusters', pointerOff);
+      map.current.on('mouseenter', 'listing-points', pointerOn);
+      map.current.on('mouseleave', 'listing-points', pointerOff);
+    };
+    const initialize = () => {
+      addMapLayers();
+      registerInteractions();
+    };
+    if (map.current.isStyleLoaded()) initialize();
+    else map.current.once('style.load', initialize);
 
-    if (map.current.isStyleLoaded()) {
-      updateLayers();
-    } else {
-      map.current.on('load', updateLayers);
-    }
-
-    filterListings().forEach((listing) => {
-      if (
-        listing.latitude != null &&
-        listing.longitude != null &&
-        listing.latitude !== -1 &&
-        listing.longitude !== -1
-      ) {
-        const capitalizedProvider = listing.provider
-          ? listing.provider.charAt(0).toUpperCase() + listing.provider.slice(1)
-          : 'N/A';
-
-        const popupContent = `
-          <div class="map-popup-content">
-            <img
-              src="${listing.image_url}"
-              onerror="this.onerror=null;this.src='${no_image}'"
-            />
-            <h4>${listing.title}</h4>
-            <div class="info">
-              <span><strong>${t('map.popupPrice')}</strong> ${listing.price ? listing.price + ' €' : t('common.na')}</span>
-              <span><strong>${t('map.popupAddress')}</strong> ${listing.address || t('common.na')}</span>
-              <span><strong>${t('map.popupJob')}</strong> ${listing.job_name || t('common.na')}</span>
-              <span><strong>${t('map.popupProvider')}</strong> ${capitalizedProvider}</span>
-              <span><strong>${t('map.popupSize')}</strong> ${listing.size != null ? `${listing.size} m²` : t('common.na')}</span>
-              <div style="display: flex; gap: 8px; margin-top: 8px; justify-content: space-between;">
-                <div class="map-popup-content__linkButton">
-                  <a href="${listing.link}" target="_blank" rel="noopener noreferrer">
-                    ${renderToString(<IconLink />)}
-                  </a>
-                </div>
-                <button
-                  class="map-popup-content__detailsButton"
-                  title="${t('map.popupViewDetails')}"
-                  onclick="viewDetails('${listing.id}')"
-                >
-                  ${renderToString(<IconEyeOpened />)}
-                </button>
-                <button
-                  class="map-popup-content__deleteButton"
-                  title="${t('map.popupRemove')}"
-                  onclick="deleteListing('${listing.id}')"
-                >
-                  ${renderToString(<IconDelete />)}
-                </button>
-              </div>
-            </div>
-          </div>`;
-
-        const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-
-        let color = '#3FB1CE';
-        if (distanceFilter > 0 && homeAddress?.coords) {
-          const dist = distanceMeters(
-            homeAddress.coords.lat,
-            homeAddress.coords.lng,
-            listing.latitude,
-            listing.longitude,
-          );
-          if (dist <= distanceFilter * 1000) {
-            color = 'orange';
-          }
-        }
-
-        const marker = new maplibregl.Marker({ color })
-          .setLngLat([listing.longitude, listing.latitude])
-          .setPopup(popup)
-          .addTo(map.current);
-
-        markers.current.push(marker);
-      }
-    });
-  }, [listings, priceRange, homeAddress, distanceFilter]);
+    return () => {
+      if (!map.current) return;
+      map.current.off('style.load', initialize);
+      map.current.off('click', 'listing-clusters', onClusterClick);
+      map.current.off('click', 'listing-points', onListingClick);
+      map.current.off('mouseenter', 'listing-clusters', pointerOn);
+      map.current.off('mouseleave', 'listing-clusters', pointerOff);
+      map.current.off('mouseenter', 'listing-points', pointerOn);
+      map.current.off('mouseleave', 'listing-points', pointerOff);
+    };
+  }, [listings, priceRange, homeAddress, distanceFilter, marketModel, style, navigate]);
 
   return (
     <>
@@ -474,6 +580,27 @@ export default function MapView() {
                 <Select.Option value="STANDARD">{t('map.filterStyleStandard')}</Select.Option>
                 <Select.Option value="SATELLITE">{t('map.filterStyleSatellite')}</Select.Option>
               </Select>
+            </div>
+
+            <div className="map-view-container__panel-row">
+              <Text size="small" strong style={{ color: '#8892a4' }}>
+                Model
+              </Text>
+              <Select
+                size="small"
+                value={marketModel}
+                onChange={(value) => setMarketModel(value)}
+                style={{ width: 110 }}
+              >
+                <Select.Option value="gbm">GBM</Select.Option>
+                <Select.Option value="ridge">Ridge</Select.Option>
+              </Select>
+            </div>
+
+            <div className="map-view-container__legend" aria-label="Price versus fair-price legend">
+              <span className="is-deal">Below fair</span>
+              <span className="is-neutral">Near fair</span>
+              <span className="is-expensive">Above fair</span>
             </div>
 
             <div className="map-view-container__panel-row">

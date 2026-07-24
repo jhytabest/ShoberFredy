@@ -12,7 +12,11 @@
  * Env: FREDY_MARKET_DB_PATH, FREDY_MARKET_EXPORTER_PORT (default 9217)
  */
 
-import { startMetricsExporter } from '../../lib/services/market/metricsExporter.js';
+import { startMetricsExporter, updateRuntimeHealthSnapshot } from '../../lib/services/market/metricsExporter.js';
+
+process.on('message', (message) => {
+  if (message?.type === 'fredy_runtime_health') updateRuntimeHealthSnapshot(message);
+});
 
 const server = await startMetricsExporter();
 if (!server) {

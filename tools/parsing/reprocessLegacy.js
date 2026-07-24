@@ -271,7 +271,7 @@ function bestEvidence(db, listing) {
       capturedAt: queue.captured_at,
     },
   ]
-    .filter(({ capture }) => capture?.fullText?.trim())
+    .filter((candidate) => candidate?.capture?.fullText?.trim())
     .sort(
       (left, right) =>
         evidenceQuality(right.capture) - evidenceQuality(left.capture) ||

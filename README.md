@@ -22,8 +22,8 @@ Fredy it adds, natively in the source tree:
   full-detail capture, required audited OpenRouter text extraction, queued
   market rating, and an idempotent notification outbox. Discovery-card values
   never become canonical listing facts.
-- **Rate-limited historical reparse** (`yarn parsing:backfill enqueue`) plus the
-  geocode backfill and legacy database import tools.
+- **Rate-limited canonical repair** (`yarn parsing:backfill enqueue`) plus
+  geocode repair and database import tools.
 - Token-aware German blacklist matching (`wg`, `befristet`) and SQLite
   `busy_timeout` for multi-process access.
 
@@ -217,10 +217,9 @@ records `inactive_at` and `inactive_reason`.
 A durable worker extracts every active listing with a required structured text
 LLM request against a strict, compact schema with a free-text `comments`
 overflow field. Live LLM extraction receives detail-page/API evidence only;
-discovery-card values never become canonical fallbacks. Historical backfills
-add their preserved discovery and legacy facts as explicitly labeled LLM
-evidence, but still require the model to extract and validate every canonical
-field. Vision is disabled by default and, when
+discovery-card values never become canonical fallbacks. Repair backfills may
+add preserved facts as explicitly labeled evidence, but still require the
+model to extract and validate every canonical field. Vision is disabled by default and, when
 explicitly enabled, is supplemental: it can never block text parsing. Validated
 LLM fields then drive geocoding, a second blacklist/filter decision, final
 semantic deduplication within the same job, storage, and the market model.
@@ -241,32 +240,16 @@ never overwrite or supplement LLM fields. Rejected listings remain stored with
 is terminal: detail, LLM, rating, and pending notification work is cancelled,
 while the listing, all source links, raw observations, and audit events remain.
 
-True pre-pipeline legacy rows are handled separately from those ordinary live
-filter rejects. Historical reconciliation considers only rows carrying a
-legacy snapshot. Detailed, non-blacklisted listings with an exact provider or
-house/street geocode confirmed inside the job polygon receive a fresh v4
-backfill; all other legacy rows move atomically into compressed
-`pre_llm_archive_*` tables together with their complete source, capture, queue,
-LLM, score, notification, and decision history. They are then absent from the
-live listing/queue graph. The archive lives in `listings.db`, so normal Fredy
-backups include it, but no production worker reads it.
-
-Backfill prompts may use clearly labeled preserved discovery-card and legacy
-snapshot facts when the retained detail text omits a field. This evidence
-contract is backfill-only; live extraction continues to receive detail/API
-evidence exclusively. A separate all-time canonical reconciliation can absorb
-historical duplicates across jobs and portals using exact source identity,
-provider listing IDs, exact semantic identity, shared images, or trusted
-house/street coordinates with matching size and price. Every absorbed row is
-stored in `canonical_merge_archive` before its production records are attached
-to the representative.
+Repair prompts may use clearly labeled preserved facts when retained detail
+text omits a field. This evidence contract is repair-only; live extraction
+continues to receive detail/API evidence exclusively.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —
 matching the OpenRouter free tier); backfill may spend at most
 `FREDY_LLM_BACKFILL_SHARE` (default 0.8) of it. The persistent weighted queue
 serves one live item and then up to three backfill items, so new listings remain
-prompt while migration cannot starve. When the budget or an upstream rate limit
+prompt while repair work cannot starve them. When the budget or an upstream rate limit
 is exhausted, queue items wait for reset. All other failures retry indefinitely
 with bounded exponential backoff and jitter; expired leases recover automatically.
 
@@ -284,21 +267,21 @@ rate, and worker defaults can be overridden with the `FREDY_LLM_*`,
 
 Important parsing settings:
 
-| Setting                                | Default | Purpose                                          |
-| -------------------------------------- | ------- | ------------------------------------------------ |
-| `FREDY_LLM_VISION_ENABLED`             | `0`     | Set to `1` to add best-effort gallery analysis.  |
-| `FREDY_LLM_DAILY_LIMIT`                | `1000`  | Persistent UTC-day request budget.               |
-| `FREDY_LLM_BACKFILL_SHARE`             | `0.8`   | Maximum share available to historical migration. |
-| `FREDY_PARSER_BACKFILL_BURST`          | `3`     | Backfill calls allowed after each live call.     |
-| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`    | Local rate limiter.                              |
-| `FREDY_DISCOVERY_MAX_PAGES`            | provider| Result pages visited per scheduled provider run. |
-| `FREDY_DETAIL_FETCH_IDLE_POLL_MS`      | `1000`  | Detail worker delay when no card is due.          |
+| Setting                                | Default        | Purpose                                                                                                                                      |
+| -------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FREDY_LLM_VISION_ENABLED`             | `0`            | Set to `1` to add best-effort gallery analysis.                                                                                              |
+| `FREDY_LLM_DAILY_LIMIT`                | `1000`         | Persistent UTC-day request budget.                                                                                                           |
+| `FREDY_LLM_BACKFILL_SHARE`             | `0.8`          | Maximum share available to repair backfills.                                                                                                 |
+| `FREDY_PARSER_BACKFILL_BURST`          | `3`            | Backfill calls allowed after each live call.                                                                                                 |
+| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`           | Local rate limiter.                                                                                                                          |
+| `FREDY_DISCOVERY_MAX_PAGES`            | provider       | Result pages visited per scheduled provider run.                                                                                             |
+| `FREDY_DETAIL_FETCH_IDLE_POLL_MS`      | `1000`         | Detail worker delay when no card is due.                                                                                                     |
 | `FREDY_PRELLM_AREA_MIN_PRECISION`      | `house,street` | Geocode precisions confident enough to reject a listing on the area filter before the LLM call. Coarser precisions never reject (fail open). |
-| `FREDY_LLM_MAX_TEXT_CHARS`             | `24000` | Cap on visible-text evidence sent to the LLM.    |
-| `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000` | Cap on embedded-JSON evidence sent to the LLM.   |
-| `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000` | Global defer window when the provider returns a transient upstream-capacity error (HTTP-200-wrapped 5xx). |
-| `FREDY_DB_PAYLOAD_RETENTION_DAYS`      | `30`    | Age after which the nightly maintenance cron nulls heavy payloads (capture JSON, LLM request/response bodies) on terminal rows. |
-| `FREDY_DB_VACUUM`                      | `0`     | Set to `1` to also `VACUUM` (exclusive lock) during nightly maintenance. |
+| `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`        | Cap on visible-text evidence sent to the LLM.                                                                                                |
+| `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000`        | Cap on embedded-JSON evidence sent to the LLM.                                                                                               |
+| `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`        | Global defer window when the provider returns a transient upstream-capacity error (HTTP-200-wrapped 5xx).                                    |
+| `FREDY_DB_PAYLOAD_RETENTION_DAYS`      | `30`           | Age after which the nightly maintenance cron nulls heavy payloads (capture JSON, LLM request/response bodies) on terminal rows.              |
+| `FREDY_DB_VACUUM`                      | `0`            | Set to `1` to also `VACUUM` (exclusive lock) during nightly maintenance.                                                                     |
 
 Before the required LLM extraction, a deterministic tier mines price, size,
 rooms, address and (ImmoScout) rooftop coordinates from the captured detail
@@ -306,14 +289,8 @@ evidence and applies the blacklist, specification and spatial filters, so a
 listing that will be rejected anyway never spends an LLM call. Deterministic
 values only gate and dedupe — they never become canonical listing facts.
 
-Migration 30 automatically queues every existing listing for schema-v4 text
-extraction using the best retained detail capture, falling back to its stored
-description only when no capture exists. Migration 31 keeps the former semantic
-columns in `legacy_snapshot_json` for audit and replaces the canonical title,
-address, price, size, rooms, coordinates, filters, and attributes exclusively
-from the validated v4 result. Null LLM facts remain null. Legacy model artifacts
-and scores are cleared so retraining uses only the v4 feature space. Check or
-repair migration progress without opening historical listing pages or APIs:
+The repair queue reuses the best retained capture and never opens provider
+pages. It is available for a future schema repair without affecting live work:
 
 ```bash
 yarn parsing:backfill enqueue
@@ -322,9 +299,32 @@ yarn parsing:backfill pause
 yarn parsing:backfill resume
 ```
 
-The status output reports total and migrated listing counts, queue state, LLM
-budget, and audit outcomes. A listing is never finalized or notified without a
-validated text-LLM result.
+The status output reports repair progress, queue state, LLM budget, and audit
+outcomes. A listing is never finalized or notified without a validated
+text-LLM result.
+
+## Database maintenance toolkit
+
+One command covers database health, canonical dedupe, bounded payload cleanup,
+archive verification, and optional file compaction. Commands are read-only
+unless `--apply` is supplied:
+
+```bash
+yarn maintenance status
+yarn maintenance dedupe
+yarn maintenance dedupe --apply
+yarn maintenance clean
+yarn maintenance clean --apply
+yarn maintenance clean --apply --vacuum
+yarn maintenance verify-archives
+```
+
+`status` checks the schema ledger, SQLite integrity, foreign keys, manual audit
+relations, queues, archives, cleanup eligibility, and all owner-scoped
+duplicate tiers. Dedupe archives every absorbed listing before merging it.
+Cleanup retains audit rows while removing only aged heavyweight request,
+response, and capture payloads. `--vacuum` requires `--apply` and should be run
+only during an exclusive maintenance window.
 
 ## Homeserver deployment
 

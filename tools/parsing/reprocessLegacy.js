@@ -101,9 +101,18 @@ export function applyHistoricalReconciliation(db = SqliteConnection.getConnectio
   } catch (error) {
     db.prepare(
       `UPDATE pre_llm_archive_runs
-       SET status = 'failed', completed_at = ?, summary_json = ?, error = ?
+       SET status = 'failed', completed_at = ?, archived_count = ?,
+           migrated_count = ?, repaired_count = ?, summary_json = ?, error = ?
        WHERE id = ?`,
-    ).run(Date.now(), JSON.stringify(summary), String(error?.stack || error).slice(0, 8000), runId);
+    ).run(
+      Date.now(),
+      summary.archived,
+      summary.migrated,
+      summary.repaired,
+      JSON.stringify(summary),
+      String(error?.stack || error).slice(0, 8000),
+      runId,
+    );
     throw error;
   } finally {
     setBackfillPaused(wasPaused);

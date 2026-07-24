@@ -49,7 +49,7 @@ export function findCanonicalDuplicateClusters(db = SqliteConnection.getConnecti
     edges.push({ left, right, tier, evidence });
   };
 
-  connectIdentityMaps(db, listings, connect);
+  connectIdentityMaps(listings, connect);
   connectSemantic(listings, connect);
   connectImages(db, listings, connect);
   connectTrustedGeo(db, listings, connect);
@@ -97,39 +97,21 @@ export function applyCanonicalDedupe(db = SqliteConnection.getConnection()) {
   return summary;
 }
 
-function connectIdentityMaps(db, listings, connect) {
-  const sourceRows = db
-    .prepare(
-      `SELECT source.listing_id, source.provider, source.source_key, source.source_url
-       FROM listing_sources source
-       WHERE source.listing_id IS NOT NULL`,
-    )
-    .all();
-  const sourcesByListing = groupBy(sourceRows, ({ listing_id }) => listing_id);
+function connectIdentityMaps(listings, connect) {
   const exact = new Map();
   const providerIds = new Map();
   for (const listing of listings) {
-    const sources = sourcesByListing.get(listing.id) || [];
-    for (const source of sources) {
-      connectMap(exact, `${listing.user_id}|source:${source.provider}:${source.source_key}`, listing.id, connect, {
-        provider: source.provider,
-        sourceKey: source.source_key,
-      });
+    // Historical source rows and source_urls_json can already contain links
+    // absorbed from several unrelated listings. Only the listing's own primary
+    // URL is a safe identity anchor; cross-portal identity is handled by the
+    // independent semantic/image/trusted-coordinate tiers below.
+    const canonical = canonicalUrl(listing.link);
+    if (canonical) {
+      connectMap(exact, `${listing.user_id}|url:${canonical}`, listing.id, connect, { url: canonical });
     }
-    const urls = unique([
-      listing.link,
-      ...parseArray(listing.source_urls_json),
-      ...sources.map(({ source_url }) => source_url),
-    ]);
-    for (const url of urls) {
-      const canonical = canonicalUrl(url);
-      if (canonical) {
-        connectMap(exact, `${listing.user_id}|url:${canonical}`, listing.id, connect, { url: canonical });
-      }
-      const providerId = providerListingIdentity(url);
-      if (providerId) {
-        connectMap(providerIds, `${listing.user_id}|${providerId}`, listing.id, connect, { providerId }, 'provider_id');
-      }
+    const providerId = providerListingIdentity(listing.link);
+    if (providerId) {
+      connectMap(providerIds, `${listing.user_id}|${providerId}`, listing.id, connect, { providerId }, 'provider_id');
     }
   }
 }
@@ -194,6 +176,7 @@ function connectTrustedGeo(db, listings, connect) {
   const groups = new Map();
   for (const listing of listings) {
     const size = finitePositive(listing.size);
+    if (listing.latitude == null || listing.longitude == null) continue;
     const latitude = Number(listing.latitude);
     const longitude = Number(listing.longitude);
     const precision = accuracy.get(addressKey(listing.address));
@@ -201,6 +184,9 @@ function connectTrustedGeo(db, listings, connect) {
       size == null ||
       !Number.isFinite(latitude) ||
       !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180 ||
+      (latitude === 0 && longitude === 0) ||
       !TRUSTED_ACCURACIES.has(precision)
     ) {
       continue;
@@ -358,9 +344,9 @@ function deleteScore(db, table, listingId) {
 
 function compareRepresentative(left, right) {
   return (
+    Number(right.canonical_schema_version >= 4) - Number(left.canonical_schema_version >= 4) ||
     Number(Boolean(left.manually_deleted || left.hidden_reason)) -
       Number(Boolean(right.manually_deleted || right.hidden_reason)) ||
-    Number(right.canonical_schema_version >= 4) - Number(left.canonical_schema_version >= 4) ||
     Number(right.is_active) - Number(left.is_active) ||
     completeness(right) - completeness(left) ||
     Number(left.created_at || 0) - Number(right.created_at || 0) ||

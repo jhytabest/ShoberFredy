@@ -23,6 +23,8 @@
     "market:exporter": "node tools/market/marketExporter.js",
     "geocode:backfill": "node tools/market/geocoderBackfill.js run",
     "parsing:backfill": "node --env-file-if-exists=.env.local tools/parsing/backfill.js",
+    "parsing:reconcile-legacy": "node --env-file-if-exists=.env.local tools/parsing/reprocessLegacy.js",
+    "parsing:dedupe": "node --env-file-if-exists=.env.local tools/parsing/dedupeCanonical.js",
     "migrate:import": "node tools/migrate/importLegacyDb.js",
     "copyright": "node ./copyright.js"
   },

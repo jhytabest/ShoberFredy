@@ -187,8 +187,9 @@ queue in FIFO order independently of future discovery runs; failures move aside
 with durable backoff, so another provider can continue. A card that already
 proves a blacklist/specification failure is audited and stopped immediately
 after discovery dedupe, without waiting behind detail fetches. After detail capture, a
-small deterministic classifier deduplicates only identity-preserving URLs or a
-strict card-plus-image identity and applies the job blacklist and specification
+small deterministic classifier establishes trusted identity facts before the
+detail dedupe checks identity-preserving URLs or a strict evidence-plus-image
+identity and applies the job blacklist and specification
 limits to the complete detail evidence. Pre-LLM filter matches are stored as
 soft-deleted audit listings and do not spend an LLM call. CAPTCHA and bot
 challenge pages are retried as acquisition failures and can never participate
@@ -215,9 +216,11 @@ records `inactive_at` and `inactive_reason`.
 
 A durable worker extracts every active listing with a required structured text
 LLM request against a strict, compact schema with a free-text `comments`
-overflow field. The LLM receives detail-page/API evidence only. Discovery-card
-title, address, price, size, and rooms are never fallbacks after LLM extraction;
-unknown values remain null/unknown. Vision is disabled by default and, when
+overflow field. Live LLM extraction receives detail-page/API evidence only;
+discovery-card values never become canonical fallbacks. Historical backfills
+add their preserved discovery and legacy facts as explicitly labeled LLM
+evidence, but still require the model to extract and validate every canonical
+field. Vision is disabled by default and, when
 explicitly enabled, is supplemental: it can never block text parsing. Validated
 LLM fields then drive geocoding, a second blacklist/filter decision, final
 semantic deduplication within the same job, storage, and the market model.
@@ -237,6 +240,26 @@ never overwrite or supplement LLM fields. Rejected listings remain stored with
 `hidden_reason` plus every decision in `filter_reasons_json` for audit. Filtering
 is terminal: detail, LLM, rating, and pending notification work is cancelled,
 while the listing, all source links, raw observations, and audit events remain.
+
+True pre-pipeline legacy rows are handled separately from those ordinary live
+filter rejects. Historical reconciliation considers only rows carrying a
+legacy snapshot. Detailed, non-blacklisted listings with an exact provider or
+house/street geocode confirmed inside the job polygon receive a fresh v4
+backfill; all other legacy rows move atomically into compressed
+`pre_llm_archive_*` tables together with their complete source, capture, queue,
+LLM, score, notification, and decision history. They are then absent from the
+live listing/queue graph. The archive lives in `listings.db`, so normal Fredy
+backups include it, but no production worker reads it.
+
+Backfill prompts may use clearly labeled preserved discovery-card and legacy
+snapshot facts when the retained detail text omits a field. This evidence
+contract is backfill-only; live extraction continues to receive detail/API
+evidence exclusively. A separate all-time canonical reconciliation can absorb
+historical duplicates across jobs and portals using exact source identity,
+provider listing IDs, exact semantic identity, shared images, or trusted
+house/street coordinates with matching size and price. Every absorbed row is
+stored in `canonical_merge_archive` before its production records are attached
+to the representative.
 
 The queue is consumed exactly as fast as the LLM allows. Every request draws
 from a persistent daily budget (`FREDY_LLM_DAILY_LIMIT`, default 1000 —

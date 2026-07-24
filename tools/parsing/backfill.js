@@ -43,7 +43,9 @@ function enqueueAll() {
       `SELECT l.*
        FROM listings l
        LEFT JOIN listing_attributes a ON a.listing_id = l.id
-       WHERE COALESCE(a.schema_version, 0) < @schemaVersion
+       WHERE l.legacy_snapshot_json IS NOT NULL
+         AND l.canonical_schema_version < @schemaVersion
+         AND COALESCE(a.schema_version, 0) < @schemaVersion
          AND NOT EXISTS (
            SELECT 1 FROM parsing_queue q
            WHERE q.listing_id = l.id
@@ -90,11 +92,18 @@ function enqueueAll() {
  * @returns {object} capture for enqueueCapture
  */
 function buildCapture(row, originalCaptureJson) {
+  const legacySnapshot = parseJson(row.legacy_snapshot_json, {});
   if (originalCaptureJson) {
     try {
       const original = JSON.parse(originalCaptureJson);
       if (original?.fullText) {
-        return { ...original, images: [], backfillSchemaVersion: PIPELINE_SCHEMA_VERSION };
+        return {
+          ...original,
+          legacySnapshot,
+          images: [],
+          backfillSchemaVersion: PIPELINE_SCHEMA_VERSION,
+          backfillEvidenceContract: 2,
+        };
       }
     } catch {
       // fall through to reconstruction
@@ -119,6 +128,16 @@ function buildCapture(row, originalCaptureJson) {
     fullText: row.description || '',
     embeddedData: [],
     images: [],
+    legacySnapshot,
     backfillSchemaVersion: PIPELINE_SCHEMA_VERSION,
+    backfillEvidenceContract: 2,
   };
+}
+
+function parseJson(value, fallback) {
+  try {
+    return JSON.parse(value || '') ?? fallback;
+  } catch {
+    return fallback;
+  }
 }

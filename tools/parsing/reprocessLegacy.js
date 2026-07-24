@@ -28,7 +28,7 @@ import {
   setBackfillPaused,
 } from '../../lib/services/pipeline/queueStorage.js';
 
-const CONTRACT_VERSION = 2;
+const CONTRACT_VERSION = 3;
 
 export function planHistoricalReconciliation(db = SqliteConnection.getConnection()) {
   const rows = db
@@ -160,6 +160,7 @@ function requeueUnscorableBackfills(db) {
        WHERE rating.status = 'waiting_model'
          AND listing.canonical_schema_version >= ?
          AND listing.legacy_snapshot_json IS NOT NULL
+         AND (listing.price IS NULL OR listing.size IS NULL)
        ORDER BY listing.created_at, listing.id`,
     )
     .all(PIPELINE_SCHEMA_VERSION);

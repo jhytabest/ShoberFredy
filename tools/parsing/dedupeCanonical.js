@@ -122,9 +122,10 @@ function connectSemantic(listings, connect) {
     const title = normalize(listing.title);
     const address = normalize(listing.address);
     const price = finitePositive(listing.price);
-    if (!title || !address || !/\d/u.test(address) || price == null) continue;
-    const key = `${listing.user_id}|${title}|${address}|${price}`;
-    connectMap(identities, key, listing.id, connect, { title, address, price }, 'semantic');
+    const size = finitePositive(listing.size);
+    if (!title || !address || !/\d/u.test(address) || price == null || size == null) continue;
+    const key = `${listing.user_id}|${title}|${address}|${price}|${size}`;
+    connectMap(identities, key, listing.id, connect, { title, address, price, size }, 'semantic');
   }
 }
 

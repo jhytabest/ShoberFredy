@@ -10,10 +10,17 @@
  * Shares the homeserver_geocode_cache table and the address key with the
  * ingestion-time geocoding service.
  *
- * Usage: node tools/market/geocoderBackfill.js [run|status|refresh-all]
+ * Usage: node tools/market/geocoderBackfill.js [run|status|refresh-all|refresh-coarse]
+ *   run            geocode listings that have no coordinates yet
+ *   refresh-all    rewrite listing coordinates from the cache (does NOT re-ask
+ *                  Google for addresses already cached as precise)
+ *   refresh-coarse re-ask Google for every postcode/district address, ignoring
+ *                  the retry window; use after improving address parsing, since
+ *                  a cached coarse answer is otherwise kept until it expires
  * Env: GOOGLE_GEOCODING_API_KEY (required except status), FREDY_MARKET_DB_PATH,
  *      FREDY_GEOCODER_BATCH_SIZE, FREDY_GEOCODER_DELAY_MS,
- *      FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS
+ *      FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS,
+ *      FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS
  */
 
 import { addressKey } from '../../lib/services/geocoding/address.js';
@@ -26,6 +33,7 @@ const config = {
   batchSize: intEnv('FREDY_GEOCODER_BATCH_SIZE', 250),
   delayMs: intEnv('FREDY_GEOCODER_DELAY_MS', 150),
   retryFailedAfterDays: intEnv('FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS', 30),
+  retryCoarseAfterDays: intEnv('FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS', 14),
 };
 
 const db = openToolDb(config.dbPath);
@@ -42,6 +50,9 @@ if (mode === 'status') {
 } else if (mode === 'refresh-all') {
   mustGetEnv('GOOGLE_GEOCODING_API_KEY');
   await runOnce({ includeExistingCoordinates: true, replaceExistingCoordinates: true });
+} else if (mode === 'refresh-coarse') {
+  mustGetEnv('GOOGLE_GEOCODING_API_KEY');
+  await runOnce({ includeExistingCoordinates: true, replaceExistingCoordinates: true, retryCoarseAfterMs: 0 });
 } else {
   throw new Error(`Unknown mode: ${mode}`);
 }
@@ -49,6 +60,7 @@ if (mode === 'status') {
 async function runOnce(options = {}) {
   const includeExistingCoordinates = options.includeExistingCoordinates || false;
   const replaceExistingCoordinates = options.replaceExistingCoordinates || false;
+  const retryCoarseAfterMs = options.retryCoarseAfterMs ?? config.retryCoarseAfterDays * 24 * 60 * 60 * 1000;
   const startedAt = new Date();
   const listings = getListingsToGeocode(
     includeExistingCoordinates ? null : config.batchSize,
@@ -77,7 +89,7 @@ async function runOnce(options = {}) {
 
   for (const listing of addresses) {
     const key = addressKey(listing.address);
-    const cached = getUsableCache(db, key, config.retryFailedAfterDays * 24 * 60 * 60 * 1000);
+    const cached = getUsableCache(db, key, config.retryFailedAfterDays * 24 * 60 * 60 * 1000, retryCoarseAfterMs);
 
     if (cached?.status === 'ok') {
       summary.cached += 1;

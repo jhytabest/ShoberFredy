@@ -14,9 +14,14 @@
  *   run            geocode listings that have no coordinates yet
  *   refresh-all    rewrite listing coordinates from the cache (does NOT re-ask
  *                  Google for addresses already cached as precise)
- *   refresh-coarse re-ask Google for every postcode/district address, ignoring
+ *   refresh-coarse re-ask Google for every postcode/district cache row, ignoring
  *                  the retry window; use after improving address parsing, since
- *                  a cached coarse answer is otherwise kept until it expires
+ *                  a cached coarse answer is otherwise kept until it expires.
+ *                  Driven by the cache rather than the listings table so rows
+ *                  whose listing was archived are still repaired. Prints a
+ *                  summary with improved/stillCoarse counts, and an `aborted`
+ *                  field if Google cut the sweep short — check for it, a
+ *                  partial run looks like a successful one otherwise.
  * Env: GOOGLE_GEOCODING_API_KEY (required except status), FREDY_MARKET_DB_PATH,
  *      FREDY_GEOCODER_BATCH_SIZE, FREDY_GEOCODER_DELAY_MS,
  *      FREDY_GEOCODER_RETRY_FAILED_AFTER_DAYS,
@@ -52,9 +57,90 @@ if (mode === 'status') {
   await runOnce({ includeExistingCoordinates: true, replaceExistingCoordinates: true });
 } else if (mode === 'refresh-coarse') {
   mustGetEnv('GOOGLE_GEOCODING_API_KEY');
-  await runOnce({ includeExistingCoordinates: true, replaceExistingCoordinates: true, retryCoarseAfterMs: 0 });
+  await refreshCoarse();
 } else {
   throw new Error(`Unknown mode: ${mode}`);
+}
+
+/**
+ * Re-ask Google for every coarse cache row.
+ *
+ * Deliberately driven by the cache, not by the listings table: a listing that
+ * was archived pre-LLM no longer exists, so a listing-driven sweep can never
+ * reach its cached address — on the live database that hid 646 of 1379 coarse
+ * rows, including 84 of the 130 degraded street addresses this mode exists to
+ * repair. Listing coordinates are still refreshed for whatever rows do remain.
+ */
+async function refreshCoarse() {
+  const rows = db
+    .prepare(
+      `SELECT source_address FROM homeserver_geocode_cache
+       WHERE status = 'ok' AND accuracy IN ('postcode', 'district')
+       ORDER BY updated_at ASC`,
+    )
+    .all();
+
+  const summary = {
+    startedAt: new Date().toISOString(),
+    coarseRows: rows.length,
+    requeried: 0,
+    improved: 0,
+    stillCoarse: 0,
+    failed: 0,
+    updatedRows: 0,
+    byAccuracy: {},
+  };
+
+  for (const { source_address: address } of rows) {
+    let result;
+    try {
+      result = await geocodeAddress(address);
+    } catch (error) {
+      // One unavailable answer must not silently truncate the sweep: record it
+      // loudly so a partial run is never mistaken for a completed one.
+      summary.aborted = error.message;
+      summary.abortedAfter = summary.requeried;
+      const kind = error instanceof GeocodeUnavailableError ? 'Google unavailable' : 'unexpected error';
+      console.error(`aborting coarse refresh after ${summary.requeried} addresses (${kind}): ${error.message}`);
+      break;
+    }
+    summary.requeried += 1;
+    const key = addressKey(address);
+    if (!result) {
+      summary.failed += 1;
+      saveCache(db, {
+        addressKey: key,
+        sourceAddress: address,
+        status: 'failed',
+        latitude: null,
+        longitude: null,
+        accuracy: 'failed',
+        placeId: null,
+        formattedAddress: null,
+        error: 'No acceptable Google geocoding result',
+      });
+      await sleep(config.delayMs);
+      continue;
+    }
+    saveCache(db, {
+      addressKey: key,
+      sourceAddress: address,
+      status: 'ok',
+      latitude: result.lat,
+      longitude: result.lng,
+      accuracy: result.accuracy,
+      placeId: result.placeId,
+      formattedAddress: result.formattedAddress,
+      error: null,
+    });
+    summary.byAccuracy[result.accuracy] = (summary.byAccuracy[result.accuracy] || 0) + 1;
+    if (result.accuracy === 'house' || result.accuracy === 'street') summary.improved += 1;
+    else summary.stillCoarse += 1;
+    summary.updatedRows += updateListingsForAddress(address, result.lat, result.lng, true);
+    await sleep(config.delayMs);
+  }
+
+  console.log(JSON.stringify(summary, null, 2));
 }
 
 async function runOnce(options = {}) {

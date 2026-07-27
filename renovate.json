@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "CloakBrowser is installed unpinned at build time on purpose (bot-detection evasion decays); Renovate must not fight the Dockerfile over it.",
+      "matchPackageNames": ["cloakbrowser"],
+      "enabled": false
+    }
+  ]
+}

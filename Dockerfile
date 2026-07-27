@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 xdg-utils \
     fonts-noto-color-emoji fonts-freefont-ttf fonts-unifont \
     fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf \
-    python3 python3-venv libgomp1 make g++ \
+    python3 python3-venv libgomp1 \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /db /conf /fredy
 
@@ -31,14 +31,16 @@ ENV NODE_ENV=production \
 
 COPY package.json yarn.lock ./
 
-# Install dependencies and purge build tools (only needed to compile better-sqlite3)
-RUN yarn config set network-timeout 600000 \
+# make/g++ exist only to compile better-sqlite3. They are installed, used, and
+# purged inside a SINGLE layer on purpose: a purge in a *later* layer leaves the
+# bytes in the earlier one, so the image keeps carrying them (~520 MB here).
+# python3 is deliberately not touched — the market GBM trainer needs it at runtime.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends make g++ \
+  && yarn config set network-timeout 600000 \
   && yarn --frozen-lockfile \
-  && yarn cache clean
-
-# Purge C/C++ build tools now that native modules are compiled (python3
-# stays: the market GBM trainer needs it at runtime)
-RUN apt-get purge -y make g++ \
+  && yarn cache clean \
+  && apt-get purge -y make g++ \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 

@@ -14,7 +14,6 @@ import {
   Row,
   Col,
   Image,
-  Tag,
   Divider,
   Descriptions,
   Banner,
@@ -40,7 +39,6 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import no_image from '../../assets/no_image.png';
 import * as timeService from '../../services/time/timeService.js';
 import { formatEuroPrice } from '../../services/price/priceService.js';
-import { distanceMeters, getBoundsFromCoords } from './mapUtils.js';
 import { xhrDelete } from '../../services/xhr.js';
 import ListingDeletionModal from '../../components/ListingDeletionModal.jsx';
 
@@ -63,7 +61,6 @@ export default function ListingDetail() {
   const actions = useActions();
   const listing = useSelector((state) => state.listingsData.currentListing);
   const userSettings = useSelector((state) => state.userSettings.settings);
-  const homeAddress = userSettings?.home_address;
   const listingDeletionPref = userSettings?.listing_deletion_preference;
   const defaultDeleteType = listingDeletionPref?.hardDelete ? 'hard' : 'soft';
   const mapContainer = useRef(null);
@@ -122,147 +119,13 @@ export default function ListingDetail() {
       )
       .addTo(map.current);
 
-    if (homeAddress?.coords) {
-      new maplibregl.Marker({ color: 'red' })
-        .setLngLat([homeAddress.coords.lng, homeAddress.coords.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
-            `<h4>${t('listing.detail.mapPopupHomeAddress')}</h4><p>${homeAddress.address}</p>`,
-          ),
-        )
-        .addTo(map.current);
-
-      const bounds = getBoundsFromCoords([
-        [listing.longitude, listing.latitude],
-        [homeAddress.coords.lng, homeAddress.coords.lat],
-      ]);
-
-      map.current.fitBounds(bounds, {
-        padding: 50,
-        maxZoom: 15,
-      });
-
-      const drawLine = () => {
-        if (!map.current || !map.current.isStyleLoaded()) return;
-
-        const distance = distanceMeters(
-          listing.latitude,
-          listing.longitude,
-          homeAddress.coords.lat,
-          homeAddress.coords.lng,
-        );
-
-        const midpoint = [
-          (listing.longitude + homeAddress.coords.lng) / 2,
-          (listing.latitude + homeAddress.coords.lat) / 2,
-        ];
-
-        if (map.current.getSource('route')) {
-          map.current.getSource('route').setData({
-            type: 'FeatureCollection',
-            features: [
-              {
-                type: 'Feature',
-                geometry: {
-                  type: 'LineString',
-                  coordinates: [
-                    [listing.longitude, listing.latitude],
-                    [homeAddress.coords.lng, homeAddress.coords.lat],
-                  ],
-                },
-              },
-              {
-                type: 'Feature',
-                geometry: {
-                  type: 'Point',
-                  coordinates: midpoint,
-                },
-                properties: {
-                  distance: `${Math.round(distance)} m`,
-                },
-              },
-            ],
-          });
-        } else {
-          map.current.addSource('route', {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [
-                {
-                  type: 'Feature',
-                  geometry: {
-                    type: 'LineString',
-                    coordinates: [
-                      [listing.longitude, listing.latitude],
-                      [homeAddress.coords.lng, homeAddress.coords.lat],
-                    ],
-                  },
-                },
-                {
-                  type: 'Feature',
-                  geometry: {
-                    type: 'Point',
-                    coordinates: midpoint,
-                  },
-                  properties: {
-                    distance: `${Math.round(distance)} m`,
-                  },
-                },
-              ],
-            },
-          });
-
-          map.current.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: {
-              'line-join': 'round',
-              'line-cap': 'round',
-            },
-            paint: {
-              'line-color': '#3FB1CE',
-              'line-width': 4,
-              'line-dasharray': [2, 1],
-            },
-            filter: ['==', '$type', 'LineString'],
-          });
-
-          map.current.addLayer({
-            id: 'route-distance',
-            type: 'symbol',
-            source: 'route',
-            layout: {
-              'text-field': ['get', 'distance'],
-              'text-size': 14,
-              'text-offset': [0, -1],
-              'text-allow-overlap': true,
-            },
-            paint: {
-              'text-color': '#ffffff',
-              'text-halo-color': '#3FB1CE',
-              'text-halo-width': 2,
-            },
-            filter: ['==', '$type', 'Point'],
-          });
-        }
-      };
-
-      if (map.current.isStyleLoaded()) {
-        drawLine();
-      } else {
-        map.current.on('load', drawLine);
-      }
-    }
-
     return () => {
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
     };
-  }, [listing, loading, homeAddress]);
+  }, [listing, loading]);
 
   const confirmDeletion = async (hardDelete, remember) => {
     try {
@@ -490,17 +353,6 @@ export default function ListingDetail() {
               <Text type="secondary" style={{ whiteSpace: 'pre-wrap' }}>
                 {listing.description || t('listing.detail.noDescription')}
               </Text>
-
-              {listing.distance_to_destination && (
-                <>
-                  <Divider margin="1.5rem" />
-                  <Space align="center">
-                    <IconActivity style={{ fontSize: '18px', color: 'var(--semi-color-primary)' }} />
-                    <Text strong>{t('listing.detail.distanceToHome')}</Text>
-                    <Tag color="blue">{listing.distance_to_destination} m</Tag>
-                  </Space>
-                </>
-              )}
             </div>
           </Col>
         </Row>

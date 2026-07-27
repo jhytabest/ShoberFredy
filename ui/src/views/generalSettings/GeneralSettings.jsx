@@ -3,9 +3,8 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  AutoComplete,
   Banner,
   Button,
   Checkbox,
@@ -32,7 +31,6 @@ import {
 } from '../../services/backupRestoreClient.js';
 import { SegmentPart } from '../../components/segment/SegmentPart.jsx';
 import Headline from '../../components/headline/Headline.jsx';
-import { debounce } from '../../utils.js';
 import './GeneralSettings.less';
 
 const { Text } = Typography;
@@ -55,7 +53,7 @@ export default function GeneralSettings() {
   const actions = useActions();
   const settings = useSelector((state) => state.generalSettings.settings);
   const userSettings = useSelector((state) => state.userSettings.settings);
-  const savingUser = useIsLoading(actions.userSettings.setHomeAddress);
+  const savingUser = useIsLoading(actions.userSettings.setListingDeletionPreference);
   const fileInputRef = React.useRef(null);
 
   const [loading, setLoading] = useState(true);
@@ -68,11 +66,8 @@ export default function GeneralSettings() {
   const [workingHourFrom, setWorkingHourFrom] = useState(null);
   const [workingHourTo, setWorkingHourTo] = useState(null);
 
-  const [address, setAddress] = useState('');
-  const [coords, setCoords] = useState(null);
   const [listingDeleteHard, setListingDeleteHard] = useState(false);
   const [listingDeleteSkipPrompt, setListingDeleteSkipPrompt] = useState(false);
-  const [addressSuggestions, setAddressSuggestions] = useState([]);
 
   const [account, setAccount] = useState({ username: '', password: '', password2: '' });
   const [accountSaving, setAccountSaving] = useState(false);
@@ -110,8 +105,6 @@ export default function GeneralSettings() {
   }, [settings]);
 
   useEffect(() => {
-    setAddress(userSettings?.home_address?.address || '');
-    setCoords(userSettings?.home_address?.coords || null);
     setListingDeleteHard(userSettings?.listing_deletion_preference?.hardDelete ?? false);
     setListingDeleteSkipPrompt(userSettings?.listing_deletion_preference?.skipPrompt ?? false);
   }, [userSettings]);
@@ -137,17 +130,6 @@ export default function GeneralSettings() {
       window.clearInterval(timer);
     };
   }, []);
-
-  const searchAddress = useMemo(
-    () =>
-      debounce((value) => {
-        if (!value) return setAddressSuggestions([]);
-        xhrGet(`/api/user/settings/autocomplete?q=${encodeURIComponent(value)}`)
-          .then((response) => setAddressSuggestions(response.json))
-          .catch(() => setAddressSuggestions([]));
-      }, 300),
-    [],
-  );
 
   const saveRuntimeSettings = async () => {
     if (!interval || !port || !sqlitePath) {
@@ -177,8 +159,6 @@ export default function GeneralSettings() {
 
   const saveUserSettings = async () => {
     try {
-      const result = await actions.userSettings.setHomeAddress(address);
-      setCoords(result.coords);
       await actions.userSettings.setListingDeletionPreference({
         hardDelete: listingDeleteHard,
         skipPrompt: listingDeleteSkipPrompt,
@@ -238,7 +218,14 @@ export default function GeneralSettings() {
     <div className="generalSettings">
       <Headline text={t('settings.title')} />
       <Tabs type="line">
-        <TabPane tab={<span><IconSignal size="small" /> {t('settings.tabSystem')}</span>} itemKey="system">
+        <TabPane
+          tab={
+            <span>
+              <IconSignal size="small" /> {t('settings.tabSystem')}
+            </span>
+          }
+          itemKey="system"
+        >
           <div className="generalSettings__tab-content">
             <SegmentPart name={t('settings.port')} helpText={t('settings.portHelp')}>
               <InputNumber value={port} min={1} max={65535} onChange={setPort} />
@@ -254,15 +241,30 @@ export default function GeneralSettings() {
               <Input value={sqlitePath} onChange={setSqlitePath} />
             </SegmentPart>
             <div className="generalSettings__save-row">
-              <Button theme="solid" type="primary" icon={<IconSave />} onClick={saveRuntimeSettings}>{t('settings.save')}</Button>
+              <Button theme="solid" type="primary" icon={<IconSave />} onClick={saveRuntimeSettings}>
+                {t('settings.save')}
+              </Button>
             </div>
           </div>
         </TabPane>
 
-        <TabPane tab={<span><IconRefresh size="small" /> {t('settings.tabExecution')}</span>} itemKey="execution">
+        <TabPane
+          tab={
+            <span>
+              <IconRefresh size="small" /> {t('settings.tabExecution')}
+            </span>
+          }
+          itemKey="execution"
+        >
           <div className="generalSettings__tab-content">
             <SegmentPart name={t('settings.searchInterval')} helpText={t('settings.searchIntervalHelp')}>
-              <InputNumber value={interval} min={5} max={1440} suffix={t('settings.searchIntervalSuffix')} onChange={setInterval} />
+              <InputNumber
+                value={interval}
+                min={5}
+                max={1440}
+                suffix={t('settings.searchIntervalSuffix')}
+                onChange={setInterval}
+              />
             </SegmentPart>
             <SegmentPart name={t('settings.workingHours')} helpText={t('settings.workingHoursHelp')}>
               <div className="generalSettings__timePickerContainer">
@@ -284,12 +286,21 @@ export default function GeneralSettings() {
               <Input value={proxyUrl} onChange={setProxyUrl} placeholder={t('settings.proxyUrlPlaceholder')} />
             </SegmentPart>
             <div className="generalSettings__save-row">
-              <Button theme="solid" type="primary" icon={<IconSave />} onClick={saveRuntimeSettings}>{t('settings.save')}</Button>
+              <Button theme="solid" type="primary" icon={<IconSave />} onClick={saveRuntimeSettings}>
+                {t('settings.save')}
+              </Button>
             </div>
           </div>
         </TabPane>
 
-        <TabPane tab={<span><IconHome size="small" /> {t('settings.tabUserSettings')}</span>} itemKey="preferences">
+        <TabPane
+          tab={
+            <span>
+              <IconHome size="small" /> {t('settings.tabUserSettings')}
+            </span>
+          }
+          itemKey="preferences"
+        >
           <div className="generalSettings__tab-content">
             <SegmentPart name={t('settings.language')} helpText={t('settings.languageHelp')}>
               <Select
@@ -301,57 +312,93 @@ export default function GeneralSettings() {
                 onChange={(value) => actions.userSettings.setLanguage(value)}
               />
             </SegmentPart>
-            <SegmentPart name={t('settings.homeAddress')} helpText={t('settings.homeAddressHelp')}>
-              <AutoComplete
-                data={addressSuggestions}
-                value={address}
-                showClear
-                onChange={setAddress}
-                onSearch={searchAddress}
-                style={{ width: '100%' }}
-              />
-              {coords?.lat === -1 && <Banner type="danger" closeIcon={null} description={t('settings.homeAddressGeoError')} />}
-            </SegmentPart>
             <SegmentPart name={t('settings.listingDeletion')} helpText={t('settings.listingDeletionHelp')}>
-              <RadioGroup value={listingDeleteHard ? 'hard' : 'soft'} onChange={(event) => setListingDeleteHard(event.target.value === 'hard')}>
-                <Radio value="soft"><Text strong>{t('settings.listingDeletionSoftLabel')}</Text></Radio>
-                <Radio value="hard"><Text strong>{t('settings.listingDeletionHardLabel')}</Text></Radio>
+              <RadioGroup
+                value={listingDeleteHard ? 'hard' : 'soft'}
+                onChange={(event) => setListingDeleteHard(event.target.value === 'hard')}
+              >
+                <Radio value="soft">
+                  <Text strong>{t('settings.listingDeletionSoftLabel')}</Text>
+                </Radio>
+                <Radio value="hard">
+                  <Text strong>{t('settings.listingDeletionHardLabel')}</Text>
+                </Radio>
               </RadioGroup>
-              <Checkbox checked={listingDeleteSkipPrompt} onChange={(event) => setListingDeleteSkipPrompt(event.target.checked)}>
+              <Checkbox
+                checked={listingDeleteSkipPrompt}
+                onChange={(event) => setListingDeleteSkipPrompt(event.target.checked)}
+              >
                 {t('settings.listingDeletionSkipPrompt')}
               </Checkbox>
             </SegmentPart>
             <div className="generalSettings__save-row">
-              <Button theme="solid" type="primary" icon={<IconSave />} loading={savingUser} onClick={saveUserSettings}>{t('settings.save')}</Button>
+              <Button theme="solid" type="primary" icon={<IconSave />} loading={savingUser} onClick={saveUserSettings}>
+                {t('settings.save')}
+              </Button>
             </div>
           </div>
         </TabPane>
 
-        <TabPane tab={<span><IconUser size="small" /> {t('settings.tabAccount')}</span>} itemKey="account">
+        <TabPane
+          tab={
+            <span>
+              <IconUser size="small" /> {t('settings.tabAccount')}
+            </span>
+          }
+          itemKey="account"
+        >
           <div className="generalSettings__tab-content">
             <SegmentPart name={t('settings.accountUsername')}>
-              <Input value={account.username} onChange={(username) => setAccount((current) => ({ ...current, username }))} />
+              <Input
+                value={account.username}
+                onChange={(username) => setAccount((current) => ({ ...current, username }))}
+              />
             </SegmentPart>
             <SegmentPart name={t('settings.accountPassword')} helpText={t('settings.accountPasswordHelp')}>
-              <Input mode="password" value={account.password} onChange={(password) => setAccount((current) => ({ ...current, password }))} />
+              <Input
+                mode="password"
+                value={account.password}
+                onChange={(password) => setAccount((current) => ({ ...current, password }))}
+              />
             </SegmentPart>
             <SegmentPart name={t('settings.accountPasswordRepeat')}>
-              <Input mode="password" value={account.password2} onChange={(password2) => setAccount((current) => ({ ...current, password2 }))} />
+              <Input
+                mode="password"
+                value={account.password2}
+                onChange={(password2) => setAccount((current) => ({ ...current, password2 }))}
+              />
             </SegmentPart>
             <div className="generalSettings__save-row">
-              <Button theme="solid" type="primary" icon={<IconSave />} loading={accountSaving} onClick={saveAccount}>{t('settings.save')}</Button>
+              <Button theme="solid" type="primary" icon={<IconSave />} loading={accountSaving} onClick={saveAccount}>
+                {t('settings.save')}
+              </Button>
             </div>
           </div>
         </TabPane>
 
-        <TabPane tab={<span><IconPulse size="small" /> {t('settings.tabRuntime')}</span>} itemKey="runtime">
+        <TabPane
+          tab={
+            <span>
+              <IconPulse size="small" /> {t('settings.tabRuntime')}
+            </span>
+          }
+          itemKey="runtime"
+        >
           <div className="generalSettings__tab-content">
             <Banner
               type={!healthError && health?.status === 'ok' ? 'success' : 'danger'}
               fullMode={false}
               closeIcon={null}
-              title={t(!healthError && health?.status === 'ok' ? 'settings.runtimeHealthy' : 'settings.runtimeUnhealthy')}
-              description={health ? Object.entries(health.checks || {}).map(([name, ok]) => `${name}: ${ok ? 'ok' : 'failed'}`).join(' · ') : t('settings.runtimeUnavailable')}
+              title={t(
+                !healthError && health?.status === 'ok' ? 'settings.runtimeHealthy' : 'settings.runtimeUnhealthy',
+              )}
+              description={
+                health
+                  ? Object.entries(health.checks || {})
+                      .map(([name, ok]) => `${name}: ${ok ? 'ok' : 'failed'}`)
+                      .join(' · ')
+                  : t('settings.runtimeUnavailable')
+              }
             />
             <SegmentPart name={t('settings.runtimeWorkers')}>
               <div className="generalSettings__workers">
@@ -362,7 +409,10 @@ export default function GeneralSettings() {
                       {worker.healthy ? t('settings.runtimeWorkerHealthy') : t('settings.runtimeWorkerUnhealthy')}
                     </Text>
                     <Text type="secondary">
-                      {t('settings.runtimeWorkerCounts', { completed: worker.completedItems, failed: worker.failedItems })}
+                      {t('settings.runtimeWorkerCounts', {
+                        completed: worker.completedItems,
+                        failed: worker.failedItems,
+                      })}
                     </Text>
                   </div>
                 ))}
@@ -371,15 +421,33 @@ export default function GeneralSettings() {
           </div>
         </TabPane>
 
-        <TabPane tab={<span><IconFolder size="small" /> {t('settings.tabBackup')}</span>} itemKey="backup">
+        <TabPane
+          tab={
+            <span>
+              <IconFolder size="small" /> {t('settings.tabBackup')}
+            </span>
+          }
+          itemKey="backup"
+        >
           <div className="generalSettings__tab-content">
             <SegmentPart name={t('settings.backupSectionName')} helpText={t('settings.backupHelp')}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button icon={<IconSave />} onClick={async () => {
-                  try { await downloadBackupZip(); } catch { Toast.error(t('settings.backupDownloadError')); }
-                }}>{t('settings.backupDownload')}</Button>
+                <Button
+                  icon={<IconSave />}
+                  onClick={async () => {
+                    try {
+                      await downloadBackupZip();
+                    } catch {
+                      Toast.error(t('settings.backupDownloadError'));
+                    }
+                  }}
+                >
+                  {t('settings.backupDownload')}
+                </Button>
                 <input ref={fileInputRef} type="file" accept=".zip,application/zip" hidden onChange={selectRestore} />
-                <Button icon={<IconFolder />} onClick={() => fileInputRef.current?.click()}>{t('settings.backupRestoreFromZip')}</Button>
+                <Button icon={<IconFolder />} onClick={() => fileInputRef.current?.click()}>
+                  {t('settings.backupRestoreFromZip')}
+                </Button>
               </div>
             </SegmentPart>
           </div>
@@ -396,7 +464,9 @@ export default function GeneralSettings() {
         confirmLoading={restoreBusy}
       >
         <Banner
-          type={restoreInfo?.severity === 'danger' ? 'danger' : restoreInfo?.severity === 'warning' ? 'warning' : 'success'}
+          type={
+            restoreInfo?.severity === 'danger' ? 'danger' : restoreInfo?.severity === 'warning' ? 'warning' : 'success'
+          }
           fullMode={false}
           closeIcon={null}
           description={restoreInfo?.message}

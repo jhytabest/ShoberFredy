@@ -236,27 +236,6 @@ const useFredyState = create(
               set((state) => ({ userSettings: { ...state.userSettings, loaded: true } }));
             }
           },
-          async setHomeAddress(address) {
-            try {
-              const response = await xhrPost('/api/user/settings/home-address', { home_address: address });
-              if (response.status === 200) {
-                set((state) => ({
-                  userSettings: {
-                    ...state.userSettings,
-                    settings: {
-                      ...state.userSettings.settings,
-                      home_address: { address, coords: response.json.coords },
-                    },
-                  },
-                }));
-                return response.json;
-              }
-              throw response;
-            } catch (Exception) {
-              console.error('Error while trying to update home address. Error:', Exception);
-              throw Exception;
-            }
-          },
           async setListingsViewMode(listings_view_mode) {
             try {
               await xhrPost('/api/user/settings/listings-view-mode', { listings_view_mode });

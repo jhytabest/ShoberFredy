@@ -4,11 +4,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { parseBoolean, parseNumber, parseString, useSearchParamState } from '../../hooks/useSearchParamState.js';
+import { parseBoolean, parseString, useSearchParamState } from '../../hooks/useSearchParamState.js';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useActions, useSelector } from '../../services/state/store.js';
-import { generateCircleCoords, getBoundsFromCenter, getBoundsFromCoords } from './mapUtils.js';
+import { getBoundsFromCoords } from './mapUtils.js';
 import { Banner, Select, Switch, Toast, Typography } from '@douyinfe/semi-ui-19';
 
 import no_image from '../../assets/no_image.png';
@@ -16,7 +16,7 @@ import _RangeSlider from 'react-range-slider-input';
 import 'react-range-slider-input/dist/style.css';
 import './Map.less';
 import { xhrDelete } from '../../services/xhr.js';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ListingDeletionModal from '../../components/ListingDeletionModal.jsx';
 import Map from '../../components/map/Map.jsx';
 import Headline from '../../components/headline/Headline.jsx';
@@ -30,20 +30,17 @@ export default function MapView() {
   const t = useTranslation();
   const mapContainer = useRef(null);
   const map = useRef(null);
-  const homeMarker = useRef(null);
   const actions = useActions();
   const navigate = useNavigate();
   const sp = useSearchParams();
   const [searchParams, setSearchParams] = sp;
   const listings = useSelector((state) => state.listingsData.mapListings);
   const userSettings = useSelector((state) => state.userSettings.settings);
-  const homeAddress = userSettings?.home_address;
   const listingDeletionPref = userSettings?.listing_deletion_preference;
   const defaultDeleteType = listingDeletionPref?.hardDelete ? 'hard' : 'soft';
 
   const jobs = useSelector((state) => state.jobsData.jobs);
   const [jobId, setJobId] = useSearchParamState(sp, 'job', null, parseString);
-  const [distanceFilter, setDistanceFilter] = useSearchParamState(sp, 'distance', 0, parseNumber);
   const [style] = useSearchParamState(sp, 'style', 'STANDARD', parseString);
   const [marketModel, setMarketModel] = useSearchParamState(sp, 'model', 'gbm', parseString);
   const [show3dBuildings, setShow3dBuildings] = useSearchParamState(sp, 'buildings', false, parseBoolean);
@@ -191,60 +188,23 @@ export default function MapView() {
     // animating from the zoomed-out initial state. This effect re-runs whenever
     // listings/filters change, and the fly/zoom animation was distracting on
     // every refresh.
-    if (homeAddress?.coords) {
-      if (distanceFilter > 0) {
-        const bounds = getBoundsFromCenter([homeAddress.coords.lng, homeAddress.coords.lat], distanceFilter);
+    const filtered = filterListings();
+    const coords = filtered
+      .filter((l) => l.latitude != null && l.longitude != null && l.latitude !== -1 && l.longitude !== -1)
+      .map((l) => [l.longitude, l.latitude]);
 
-        map.current.fitBounds(bounds, {
-          padding: 20,
-          maxZoom: 15,
-          duration: 0,
-        });
-      } else {
-        map.current.flyTo({
-          center: [homeAddress.coords.lng, homeAddress.coords.lat],
-          zoom: 12,
-          duration: 0,
-        });
-      }
-    } else {
-      const filtered = filterListings();
-      const coords = filtered
-        .filter((l) => l.latitude != null && l.longitude != null && l.latitude !== -1 && l.longitude !== -1)
-        .map((l) => [l.longitude, l.latitude]);
-
-      if (coords.length > 0) {
-        const bounds = getBoundsFromCoords(coords);
-        map.current.fitBounds(bounds, {
-          padding: 50,
-          maxZoom: 15,
-          duration: 0,
-        });
-      }
+    if (coords.length > 0) {
+      const bounds = getBoundsFromCoords(coords);
+      map.current.fitBounds(bounds, {
+        padding: 50,
+        maxZoom: 15,
+        duration: 0,
+      });
     }
-  }, [homeAddress?.address, distanceFilter, listings]);
+  }, [listings]);
 
   useEffect(() => {
     if (!map.current) return;
-
-    if (homeMarker.current) {
-      homeMarker.current.remove();
-      homeMarker.current = null;
-    }
-
-    if (homeAddress?.coords) {
-      const homePopup = document.createElement('div');
-      homePopup.className = 'map-popup-content';
-      const homeTitle = document.createElement('h4');
-      homeTitle.textContent = t('map.popupHomeAddress');
-      const homeText = document.createElement('p');
-      homeText.textContent = homeAddress.address;
-      homePopup.append(homeTitle, homeText);
-      homeMarker.current = new maplibregl.Marker({ color: 'red' })
-        .setLngLat([homeAddress.coords.lng, homeAddress.coords.lat])
-        .setPopup(new maplibregl.Popup({ offset: 25 }).setDOMContent(homePopup))
-        .addTo(map.current);
-    }
 
     const buildListingPopup = (listing) => {
       const root = document.createElement('div');
@@ -306,48 +266,10 @@ export default function MapView() {
 
     const addMapLayers = () => {
       if (!map.current || !map.current.isStyleLoaded()) return;
-      if (map.current.getLayer('distance-circle')) map.current.removeLayer('distance-circle');
-      if (map.current.getLayer('distance-circle-outline')) map.current.removeLayer('distance-circle-outline');
-      if (map.current.getSource('distance-circle-source')) map.current.removeSource('distance-circle-source');
       for (const layerId of ['listing-cluster-count', 'listing-clusters', 'listing-points']) {
         if (map.current.getLayer(layerId)) map.current.removeLayer(layerId);
       }
       if (map.current.getSource('listings-source')) map.current.removeSource('listings-source');
-
-      if (distanceFilter > 0 && homeAddress?.coords) {
-        const ret = generateCircleCoords([homeAddress.coords.lng, homeAddress.coords.lat], distanceFilter);
-
-        map.current.addSource('distance-circle-source', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [ret],
-            },
-          },
-        });
-
-        map.current.addLayer({
-          id: 'distance-circle',
-          type: 'fill',
-          source: 'distance-circle-source',
-          paint: {
-            'fill-color': '#90EE90',
-            'fill-opacity': 0.3,
-          },
-        });
-
-        map.current.addLayer({
-          id: 'distance-circle-outline',
-          type: 'line',
-          source: 'distance-circle-source',
-          paint: {
-            'line-color': '#006400',
-            'line-width': 1,
-          },
-        });
-      }
 
       const features = filterListings()
         .filter(
@@ -477,29 +399,12 @@ export default function MapView() {
       map.current.off('mouseenter', 'listing-points', pointerOn);
       map.current.off('mouseleave', 'listing-points', pointerOff);
     };
-  }, [listings, priceRange, homeAddress, distanceFilter, marketModel, style, navigate]);
+  }, [listings, priceRange, marketModel, style, navigate]);
 
   return (
     <>
       <Headline text={t('map.title')} />
       <div className="map-view-container">
-        {!homeAddress && (
-          <Banner
-            fullMode={true}
-            type="warning"
-            bordered
-            closeIcon={null}
-            style={{ marginBottom: '8px' }}
-            description={
-              <span>
-                {t('map.noHomeAddressBefore')}
-                <Link to="/userSettings">{t('map.noHomeAddressLink')}</Link>
-                {t('map.noHomeAddressAfter')}
-              </span>
-            }
-          />
-        )}
-
         <Banner
           fullMode={true}
           type="info"
@@ -536,26 +441,6 @@ export default function MapView() {
                     {j.name}
                   </Select.Option>
                 ))}
-              </Select>
-            </div>
-
-            <div className="map-view-container__panel-row">
-              <Text size="small" strong style={{ color: '#8892a4' }}>
-                {t('map.filterDistanceLabel')}
-              </Text>
-              <Select
-                placeholder={t('map.filterDistanceNone')}
-                size="small"
-                onChange={(val) => setDistanceFilter(val)}
-                value={distanceFilter}
-                style={{ width: 100 }}
-              >
-                <Select.Option value={0}>{t('map.filterDistanceNone')}</Select.Option>
-                <Select.Option value={5}>5 km</Select.Option>
-                <Select.Option value={10}>10 km</Select.Option>
-                <Select.Option value={15}>15 km</Select.Option>
-                <Select.Option value={20}>20 km</Select.Option>
-                <Select.Option value={25}>25 km</Select.Option>
               </Select>
             </div>
 

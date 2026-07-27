@@ -5,7 +5,6 @@
 
 import fs from 'fs';
 import { checkIfConfigIsAccessible, getProviders, refreshConfig } from './lib/utils.js';
-import * as similarityCache from './lib/services/similarity-check/similarityCache.js';
 import { runMigrations } from './lib/services/storage/migrations/migrate.js';
 import { ensureAdminUserExists } from './lib/services/storage/userStorage.js';
 import logger from './lib/services/logger.js';
@@ -68,9 +67,6 @@ if (!fs.existsSync(sqliteDir)) {
 
 // Load provider modules once at startup
 const providers = await getProviders();
-
-similarityCache.initSimilarityCache();
-similarityCache.startSimilarityCacheReloader();
 
 //assuming interval is always in minutes
 const INTERVAL = settings.interval * 60 * 1000;

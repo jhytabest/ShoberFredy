@@ -22,8 +22,6 @@ Fredy it adds, natively in the source tree:
   full-detail capture, required audited OpenRouter text extraction, queued
   market rating, and an idempotent notification outbox. Discovery-card values
   never become canonical listing facts.
-- **Rate-limited canonical repair** (`yarn parsing:backfill enqueue`) plus
-  geocode repair and database import tools.
 - Token-aware German blacklist matching (`wg`, `befristet`) and SQLite
   `busy_timeout` for multi-process access.
 
@@ -289,19 +287,6 @@ evidence and applies the blacklist, specification and spatial filters, so a
 listing that will be rejected anyway never spends an LLM call. Deterministic
 values only gate and dedupe — they never become canonical listing facts.
 
-The repair queue reuses the best retained capture and never opens provider
-pages. It is available for a future schema repair without affecting live work:
-
-```bash
-yarn parsing:backfill enqueue
-yarn parsing:backfill status
-yarn parsing:backfill pause
-yarn parsing:backfill resume
-```
-
-The status output reports repair progress, queue state, LLM budget, and audit
-outcomes. A listing is never finalized or notified without a validated
-text-LLM result.
 
 ## Database maintenance toolkit
 

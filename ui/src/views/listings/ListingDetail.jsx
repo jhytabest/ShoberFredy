@@ -110,13 +110,16 @@ export default function ListingDetail() {
 
     map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+    const popup = document.createElement('div');
+    const heading = document.createElement('h4');
+    const address = document.createElement('p');
+    heading.textContent = t('listing.detail.mapPopupListingLocation');
+    address.textContent = listing.address || '';
+    popup.append(heading, address);
+
     new maplibregl.Marker({ color: '#3FB1CE' })
       .setLngLat([listing.longitude, listing.latitude])
-      .setPopup(
-        new maplibregl.Popup({ offset: 25 }).setHTML(
-          `<h4>${t('listing.detail.mapPopupListingLocation')}</h4><p>${listing.address}</p>`,
-        ),
-      )
+      .setPopup(new maplibregl.Popup({ offset: 25 }).setDOMContent(popup))
       .addTo(map.current);
 
     return () => {

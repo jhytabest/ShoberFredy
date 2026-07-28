@@ -53,11 +53,7 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
           </div>
 
           <div className="jobsTable__row__badges">
-            <Switch
-              size="small"
-              checked={job.enabled}
-              onChange={(checked) => onStatusChange(job.id, checked)}
-            />
+            <Switch size="small" checked={job.enabled} onChange={(checked) => onStatusChange(job.id, checked)} />
             {job.running && (
               <Tag color="green" variant="light" size="small">
                 {t('jobs.cardRunning')}
@@ -78,36 +74,16 @@ const JobsTable = ({ jobs, onRun, onEdit, onClone, onDeleteListings, onDeleteJob
               />
             </Tooltip>
             <Tooltip content={t('jobs.tableEditJob')}>
-              <Button
-                type="secondary"
-                size="small"
-                icon={<IconEdit />}
-                onClick={() => onEdit(job.id)}
-              />
+              <Button type="secondary" size="small" icon={<IconEdit />} onClick={() => onEdit(job.id)} />
             </Tooltip>
             <Tooltip content={t('jobs.tableCloneJob')}>
-              <Button
-                type="tertiary"
-                size="small"
-                icon={<IconCopy />}
-                onClick={() => onClone(job.id)}
-              />
+              <Button type="tertiary" size="small" icon={<IconCopy />} onClick={() => onClone(job.id)} />
             </Tooltip>
             <Tooltip content={t('jobs.tableDeleteListings')}>
-              <Button
-                type="danger"
-                size="small"
-                icon={<IconDescend2 />}
-                onClick={() => onDeleteListings(job.id)}
-              />
+              <Button type="danger" size="small" icon={<IconDescend2 />} onClick={() => onDeleteListings(job.id)} />
             </Tooltip>
             <Tooltip content={t('jobs.tableDeleteJob')}>
-              <Button
-                type="danger"
-                size="small"
-                icon={<IconDelete />}
-                onClick={() => onDeleteJob(job.id)}
-              />
+              <Button type="danger" size="small" icon={<IconDelete />} onClick={() => onDeleteJob(job.id)} />
             </Tooltip>
           </div>
         </div>

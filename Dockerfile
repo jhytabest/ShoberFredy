@@ -38,7 +38,7 @@ COPY package.json yarn.lock ./
 RUN apt-get update \
   && apt-get install -y --no-install-recommends make g++ \
   && yarn config set network-timeout 600000 \
-  && yarn --frozen-lockfile \
+  && yarn --frozen-lockfile --production=false \
   && yarn cache clean \
   && apt-get purge -y make g++ \
   && apt-get autoremove -y \
@@ -59,6 +59,22 @@ COPY lib ./lib
 
 RUN yarn build:frontend
 
+# Frontend dependencies are build-only; the compiled assets are already in
+# ui/public. Prune them before the runtime-only CloakBrowser install.
+RUN yarn install --frozen-lockfile --production --ignore-scripts \
+  && yarn cache clean
+
+# Create the runtime identity before downloading browser state so both the
+# bundled binary and fresh anonymous /db and /conf volumes are usable without
+# root.
+RUN groupadd -g 10001 homeserver \
+  && useradd -u 10001 -g homeserver -d /home/homeserver -m -s /usr/sbin/nologin homeserver \
+  && chown 10001:10001 /db /conf
+
+ENV HOME=/home/homeserver \
+    XDG_CACHE_HOME=/home/homeserver/.cache \
+    XDG_CONFIG_HOME=/home/homeserver/.config
+
 # The ADD re-fetches the npm manifest on every build, so this layer's cache
 # busts exactly when a new CloakBrowser version is published — each deploy
 # rebuild then installs the latest release (bot-detection evasion decays fast).
@@ -70,25 +86,22 @@ ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
 RUN npm install --no-audit --no-fund --no-save --legacy-peer-deps cloakbrowser@latest
 
 # Pre-download the CloakBrowser stealth Chromium binary (supports x86_64 and arm64)
-RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())"
+RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())" \
+  && chown -R 10001:10001 /home/homeserver
 
 COPY index.js ./
 COPY tools ./tools
 
-# Dedicated unprivileged user so the hardened homeserver compose
-# (user: 10001:10001, read-only rootfs) works out of the box.
-RUN groupadd -g 10001 homeserver \
-  && useradd -u 10001 -g homeserver -d /home/homeserver -M -s /usr/sbin/nologin homeserver \
-  && install -d -o 10001 -g 10001 /home/homeserver
-
 RUN ln -s /db /fredy/db \
   && ln -s /conf /fredy/conf
+
+USER 10001:10001
 
 EXPOSE 9998
 VOLUME /db
 VOLUME /conf
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5m --retries=3 \
   CMD curl --fail --silent --show-error --max-time 5 http://localhost:9998/health || exit 1
 
 CMD ["node", "index.js"]

@@ -46,3 +46,4 @@ npm-debug.log
 
 # Build artifacts (built fresh in container)
 dist/
+ui/public/

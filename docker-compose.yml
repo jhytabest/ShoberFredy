@@ -5,17 +5,27 @@ services:
       context: .
       dockerfile: Dockerfile
     image: ${SHOBERFREDY_IMAGE:-ghcr.io/jhytabest/shoberfredy}
+    user: '10001:10001'
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       - NODE_ENV=production
-      # In-process market services (set to 0 to disable):
+      # Market helper processes; use 0 to disable either service:
       - FREDY_MARKET_EXPORTER_PORT=9217
-      - FREDY_MARKET_MODEL_INTERVAL_SECONDS=86400
+      - FREDY_MARKET_MODEL_CRON=0 2 * * *
     env_file:
       - path: ./.env.local
         required: false
     volumes:
       - ./conf:/conf
       - ./db:/db
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+      - /run:rw,noexec,nosuid,size=64m
     ports:
       - '9998:9998'
       - '9217:9217'
@@ -25,4 +35,4 @@ services:
       interval: 120s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 5m

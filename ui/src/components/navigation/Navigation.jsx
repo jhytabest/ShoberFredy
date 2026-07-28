@@ -87,9 +87,7 @@ export default function Navigation() {
         }
       }}
       header={
-        <div className="navigate__header">
-          {collapsed ? <ShibaHead size={30} /> : <ShibaLogo width={160} white />}
-        </div>
+        <div className="navigate__header">{collapsed ? <ShibaHead size={30} /> : <ShibaLogo width={160} white />}</div>
       }
       footer={
         <Nav.Footer className={`navigate__footer${collapsed ? ' navigate__footer--collapsed' : ''}`}>

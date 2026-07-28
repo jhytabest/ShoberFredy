@@ -4,14 +4,7 @@
  */
 
 import { Button, Tooltip } from '@douyinfe/semi-ui-19';
-import {
-  IconBriefcase,
-  IconCart,
-  IconDelete,
-  IconLink,
-  IconMapPin,
-  IconEyeOpened,
-} from '@douyinfe/semi-icons';
+import { IconBriefcase, IconCart, IconDelete, IconLink, IconMapPin, IconEyeOpened } from '@douyinfe/semi-icons';
 import no_image from '../../../assets/no_image.png';
 import * as timeService from '../../../services/time/timeService.js';
 import StatusControl from '../../listings/StatusControl.jsx';

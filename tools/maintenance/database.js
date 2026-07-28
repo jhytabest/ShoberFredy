@@ -13,7 +13,6 @@
  *   yarn maintenance clean
  *   yarn maintenance clean --apply
  *   yarn maintenance clean --apply --vacuum
- *   yarn maintenance verify-archives
  */
 
 import SqliteConnection from '../../lib/services/storage/SqliteConnection.js';
@@ -23,10 +22,7 @@ import {
   findCanonicalDuplicateClusters,
   summarizeCanonicalDuplicates,
 } from '../../lib/services/maintenance/canonicalDedupe.js';
-import {
-  buildDatabaseMaintenanceReport,
-  verifyArchivePayloads,
-} from '../../lib/services/maintenance/databaseReport.js';
+import { buildDatabaseMaintenanceReport } from '../../lib/services/maintenance/databaseReport.js';
 import { previewDbMaintenance, runDbMaintenance } from '../../lib/services/maintenance/databaseCleanup.js';
 import { refreshConfig } from '../../lib/utils.js';
 
@@ -61,11 +57,6 @@ if (command === 'status') {
   result = apply
     ? { mode: 'applied', ...runDbMaintenance({ vacuum }) }
     : { mode: 'preview', ...previewDbMaintenance() };
-} else if (command === 'verify-archives') {
-  requireCurrentSchema();
-  requireNoMutationFlags();
-  result = verifyArchivePayloads(db);
-  failed = !result.valid;
 } else {
   usageError(`Unknown command '${command}'`);
 }
@@ -89,8 +80,7 @@ function usageError(message) {
     `${message}\n\nUsage:\n` +
       `  yarn maintenance status\n` +
       `  yarn maintenance dedupe [--apply]\n` +
-      `  yarn maintenance clean [--apply] [--vacuum]\n` +
-      `  yarn maintenance verify-archives\n`,
+      `  yarn maintenance clean [--apply] [--vacuum]\n`,
   );
   SqliteConnection.close();
   process.exit(2);

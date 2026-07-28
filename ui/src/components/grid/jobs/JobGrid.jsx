@@ -390,12 +390,7 @@ const JobGrid = () => {
                     </Popover>
                     <Popover content={getPopoverContent(t('jobs.popoverDeleteJob'))}>
                       <div>
-                        <Button
-                          type="danger"
-                          size="small"
-                          icon={<IconDelete />}
-                          onClick={() => onJobRemoval(job.id)}
-                        />
+                        <Button type="danger" size="small" icon={<IconDelete />} onClick={() => onJobRemoval(job.id)} />
                       </div>
                     </Popover>
                   </div>

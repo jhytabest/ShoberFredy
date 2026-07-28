@@ -5,25 +5,17 @@
 
 /*
  * CLI wrapper around lib/services/market/marketModel.js for manual runs and
- * the (optional) standalone daemon mode. The single-container deployment
- * retrains in-process from index.js instead.
+ * status inspection. Scheduled training is owned by the API's single cron.
  *
- * Usage: node tools/market/marketModel.js [run|daemon|status]
+ * Usage: node tools/market/marketModel.js [run|status]
  */
 
-import {
-  initMarketModel,
-  runMarketModelOnce,
-  runMarketModelDaemon,
-  getMarketModelStatus,
-} from '../../lib/services/market/marketModel.js';
+import { initMarketModel, runMarketModelOnce, getMarketModelStatus } from '../../lib/services/market/marketModel.js';
 
 await initMarketModel();
 
 const mode = process.argv[2] || 'run';
-if (mode === 'daemon') {
-  await runMarketModelDaemon();
-} else if (mode === 'run') {
+if (mode === 'run') {
   await runMarketModelOnce();
 } else if (mode === 'status') {
   console.log(JSON.stringify(getMarketModelStatus(), null, 2));

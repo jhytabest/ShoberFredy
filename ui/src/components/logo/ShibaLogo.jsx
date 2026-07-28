@@ -38,7 +38,13 @@ export function ShibaHead({ size = 34 }) {
       <circle cx="65.4" cy="48.6" r="1.3" fill="#ffffff" />
       {/* nose + mouth */}
       <path d="M45 62 Q50 58 55 62 Q50 68 45 62 Z" fill={SHIBA_DARK} />
-      <path d="M50 66 L50 71 M50 71 Q45 77 40 73 M50 71 Q55 77 60 73" stroke={SHIBA_DARK} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+      <path
+        d="M50 66 L50 71 M50 71 Q45 77 40 73 M50 71 Q55 77 60 73"
+        stroke={SHIBA_DARK}
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        fill="none"
+      />
     </svg>
   );
 }

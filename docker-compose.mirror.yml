@@ -1,0 +1,77 @@
+name: shoberfredy-live-mirror
+
+services:
+  shoberfredy:
+    container_name: shoberfredy-live-mirror
+    image: ${SHOBERFREDY_MIRROR_IMAGE:-ghcr.io/jhytabest/shoberfredy:master}
+    platform: linux/amd64
+    pull_policy: never
+    init: true
+    user: '10001:10001'
+    command: ['node', 'tools/mirror-entrypoint.js']
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - path: ./.live-mirror/conf/geocoder.env
+        required: true
+    environment:
+      HOME: /home/homeserver
+      XDG_CACHE_HOME: /home/homeserver/.cache
+      XDG_CONFIG_HOME: /home/homeserver/.config
+      FREDY_MARKET_EXPORTER_PORT: '0'
+      FREDY_MARKET_MODEL_CRON: '0'
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+      - /run:rw,noexec,nosuid,size=64m
+    volumes:
+      - ./.live-mirror/conf:/conf:ro
+      - ./.live-mirror/db:/db
+      - ./.live-mirror/cache/browser:/home/homeserver/.cloakbrowser
+      - ./.live-mirror/cache/runtime:/home/homeserver/.cache
+      - ./.live-mirror/cache/config:/home/homeserver/.config
+      - ./tools/mirror-entrypoint.js:/fredy/tools/mirror-entrypoint.js:ro
+    networks:
+      - mirror_isolated
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', '--show-error', '--max-time', '5', 'http://localhost:9998/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+
+  ingress:
+    container_name: shoberfredy-live-mirror-ingress
+    image: ${SHOBERFREDY_MIRROR_IMAGE:-ghcr.io/jhytabest/shoberfredy:master}
+    platform: linux/amd64
+    pull_policy: never
+    init: true
+    user: '10001:10001'
+    command: ['node', 'tools/mirror-proxy.js']
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /run:rw,noexec,nosuid,size=8m
+    ports:
+      - '127.0.0.1:19998:9998'
+    volumes:
+      - ./tools/mirror-proxy.js:/fredy/tools/mirror-proxy.js:ro
+    networks:
+      - mirror_isolated
+      - mirror_ingress
+    depends_on:
+      shoberfredy:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  mirror_isolated:
+    internal: true
+  mirror_ingress:

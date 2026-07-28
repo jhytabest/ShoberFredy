@@ -4,13 +4,7 @@
  */
 
 import { Button, Tooltip } from '@douyinfe/semi-ui-19';
-import {
-  IconBriefcase,
-  IconDelete,
-  IconLink,
-  IconMapPin,
-  IconEyeOpened,
-} from '@douyinfe/semi-icons';
+import { IconBriefcase, IconDelete, IconLink, IconMapPin, IconEyeOpened } from '@douyinfe/semi-icons';
 import no_image from '../../assets/no_image.png';
 import { formatEuroPrice } from '../../services/price/priceService.js';
 import * as timeService from '../../services/time/timeService.js';
@@ -22,14 +16,7 @@ import { useTranslation, useLocale } from '../../services/i18n/i18n.jsx';
 /**
  * @param {{ listings: object[], onNavigate: Function, onDelete: Function, onRestore?: Function, isHiddenView?: boolean, onStatusChange: Function }} props
  */
-const ListingsTable = ({
-  listings,
-  onNavigate,
-  onDelete,
-  onRestore,
-  isHiddenView = false,
-  onStatusChange,
-}) => {
+const ListingsTable = ({ listings, onNavigate, onDelete, onRestore, isHiddenView = false, onStatusChange }) => {
   const t = useTranslation();
   const locale = useLocale();
   return (

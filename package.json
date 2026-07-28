@@ -1,7 +1,7 @@
 {
   "name": "shoberfredy",
-  "version": "22.9.7",
-  "description": "Fredy searches ImmoScout24, Immowelt, Kleinanzeigen, and WG-Gesucht for German real-estate listings and delivers them through configurable notification adapters.",
+  "version": "1.0.0",
+  "description": "Personal real-estate listing pipeline with durable extraction, market scoring, deduplication, and Telegram delivery.",
   "scripts": {
     "prepare": "husky",
     "start:backend": "x-var NODE_ENV=production node index.js",
@@ -14,9 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "yarn lint --fix",
     "migratedb": "node lib/services/storage/migrations/migrate.js",
-    "migratedb:overwrite": "x-var MIGRATION_ALLOW_CHECKSUM_UPDATE=true node lib/services/storage/migrations/migrate.js",
     "market:model": "node tools/market/marketModel.js run",
-    "market:model:daemon": "node tools/market/marketModel.js daemon",
     "market:exporter": "node tools/market/marketExporter.js",
     "maintenance": "node --env-file-if-exists=.env.local tools/maintenance/database.js",
     "copyright": "node ./copyright.js"
@@ -33,11 +31,11 @@
     "vite": "8.1.4"
   },
   "main": "index.js",
-  "author": "Christian Kellner",
+  "author": "Sebastien Michel and Shoberfredy contributors",
   "keywords": [
     "flat",
     "flatfinder",
-    "fredy",
+    "shoberfredy",
     "real estates",
     "germany",
     "apartment",
@@ -50,7 +48,7 @@
     "immobilienscout24"
   ],
   "bugs": {
-    "url": "https://github.com/orangecoding/fredy/issues"
+    "url": "https://github.com/jhytabest/ShoberFredy/issues"
   },
   "license": "Apache-2.0",
   "engines": {
@@ -64,49 +62,49 @@
     "Firefox ESR"
   ],
   "dependencies": {
-    "@douyinfe/semi-icons": "^2.101.1",
-    "@douyinfe/semi-illustrations": "^2.101.1",
-    "@douyinfe/semi-ui-19": "^2.101.1",
     "@fastify/cookie": "^11.1.2",
     "@fastify/helmet": "^13.1.0",
     "@fastify/session": "^11.1.2",
     "@fastify/static": "^9.3.0",
-    "@mapbox/mapbox-gl-draw": "^1.5.1",
     "@turf/boolean-point-in-polygon": "^7.3.5",
-    "@vitejs/plugin-react": "6.0.4",
     "adm-zip": "^0.6.0",
     "better-sqlite3": "^12.11.1",
-    "chart.js": "^4.5.1",
     "cheerio": "^1.2.0",
     "cloakbrowser": "^0.5.2",
     "fastify": "^5.10.0",
-    "maplibre-gl": "^5.24.0",
     "nanoid": "5.1.16",
     "node-cron": "^4.6.0",
     "node-fetch": "3.3.2",
     "p-throttle": "^8.1.0",
-    "puppeteer-core": "^25.4.0",
     "query-string": "9.4.1",
-    "react": "19.2.8",
-    "react-chartjs-2": "^5.3.1",
-    "react-dom": "19.2.8",
-    "react-range-slider-input": "^3.3.5",
-    "react-router-dom": "7.18.1",
     "sharp": "^0.35.3",
-    "vite": "8.1.5",
-    "x-var": "^3.0.1",
-    "zustand": "^5.0.14"
+    "x-var": "^3.0.1"
   },
   "devDependencies": {
+    "@douyinfe/semi-icons": "^2.101.1",
+    "@douyinfe/semi-illustrations": "^2.101.1",
+    "@douyinfe/semi-ui-19": "^2.101.1",
+    "@mapbox/mapbox-gl-draw": "^1.5.1",
+    "@vitejs/plugin-react": "6.0.4",
     "@eslint/js": "^10.0.1",
     "eslint": "10.8.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-react": "7.37.5",
     "globals": "^17.8.0",
     "husky": "9.1.7",
+    "chart.js": "^4.5.1",
     "less": "4.8.1",
     "lint-staged": "17.2.0",
     "nodemon": "^3.1.14",
-    "prettier": "3.9.6"
+    "prettier": "3.9.6",
+    "puppeteer-core": "^25.4.0",
+    "maplibre-gl": "^5.24.0",
+    "react": "19.2.8",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "19.2.8",
+    "react-range-slider-input": "^3.3.5",
+    "react-router-dom": "7.18.1",
+    "vite": "8.1.5",
+    "zustand": "^5.0.14"
   }
 }

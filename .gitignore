@@ -11,4 +11,5 @@ npm-debug.log
 tools/release/config.json
 geocoder.env
 .env.local
+.live-mirror/
 __pycache__/

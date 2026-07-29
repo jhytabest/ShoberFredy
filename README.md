@@ -239,7 +239,7 @@ tools/mirror-live.sh down
 ```
 
 The mirror contains durable state, not process memory, open connections,
-in-flight requests, or login sessions.
+in-flight requests.
 
 ## Maintenance
 

@@ -55,8 +55,6 @@ ENV FREDY_PYTHON_BIN=/opt/market-venv/bin/python3
 
 COPY lib ./lib
 
-# Frontend dependencies are build-only; the compiled assets are already in
-# ui/public. Prune them before the runtime-only CloakBrowser install.
 RUN yarn install --frozen-lockfile --production --ignore-scripts \
   && yarn cache clean
 
@@ -74,8 +72,6 @@ ENV HOME=/home/homeserver \
 # The ADD re-fetches the npm manifest on every build, so this layer's cache
 # busts exactly when a new CloakBrowser version is published — each deploy
 # rebuild then installs the latest release (bot-detection evasion decays fast).
-# --legacy-peer-deps: pre-existing dev peer conflict (eslint 10 vs
-# eslint-plugin-react) otherwise aborts the install.
 ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
 RUN npm install --no-audit --no-fund --no-save --legacy-peer-deps cloakbrowser@latest
 

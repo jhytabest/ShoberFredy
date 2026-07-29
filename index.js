@@ -73,7 +73,7 @@ const INTERVAL = settings.interval * 60 * 1000;
 await startHealthServer(settings.port || 9998);
 
 // Market services: the Prometheus exporter and CPU-heavy retraining run in
-// child processes so observability and model work cannot block the API loop.
+// child processes so observability and model work cannot block the main loop.
 // Market training is the application's only cron. FREDY_MARKET_MODEL_CRON=0
 // disables it; all pipeline work is durable and event/queue driven.
 try {

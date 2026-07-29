@@ -21,7 +21,7 @@ async function getAllFiles(dir = '.') {
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
       files = files.concat(await getAllFiles(fullPath));
-    } else if (fullPath.endsWith('.js') || fullPath.endsWith('.jsx')) {
+    } else if (fullPath.endsWith('.js')) {
       files.push(fullPath);
     }
   }

@@ -6,12 +6,12 @@
 import fs from 'fs';
 import { checkIfConfigIsAccessible, getProviders, refreshConfig } from './lib/utils.js';
 import { runMigrations } from './lib/services/storage/migrations/migrate.js';
-import { ensureAdminUserExists } from './lib/services/storage/userStorage.js';
 import logger from './lib/services/logger.js';
 import { getSettings } from './lib/services/storage/settingsStorage.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
+import { startHealthServer } from './lib/health/healthServer.js';
 import { startMetricsExporterProcess } from './lib/services/market/metricsExporterSupervisor.js';
 import { startMarketModelScheduler } from './lib/services/market/marketModelScheduler.js';
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
@@ -69,10 +69,8 @@ const providers = await getProviders();
 //assuming interval is always in minutes
 const INTERVAL = settings.interval * 60 * 1000;
 
-// Initialize API only after migrations completed
-await import('./lib/api/api.js');
-
-ensureAdminUserExists();
+// The only HTTP surface: a liveness probe for the container and the deploy gate.
+await startHealthServer(settings.port || 9998);
 
 // Market services: the Prometheus exporter and CPU-heavy retraining run in
 // child processes so observability and model work cannot block the API loop.
@@ -92,7 +90,7 @@ if (env('FREDY_MARKET_MODEL_CRON') !== '0') {
   }
 }
 
-logger.info(`Started Fredy successfully. Ui can be accessed via http://localhost:${settings.port}`);
+logger.info('Started successfully. Listings are delivered over Telegram; there is no UI.');
 
 // Independent durable consumers start before the scrape producer. Neither is
 // awaited by scheduled scrape runs. Each returns its name when it actually

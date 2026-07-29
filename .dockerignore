@@ -18,7 +18,6 @@ conf/
 .DS_Store
 
 # Testing
-test/
 
 # Documentation
 doc/
@@ -27,7 +26,6 @@ doc/
 
 # Development config files
 .env.local
-.babelrc
 .husky/
 .nvmrc
 .prettierrc
@@ -37,7 +35,6 @@ eslint.config.js
 # Docker files (not needed inside container)
 Dockerfile
 docker-compose.yml
-docker-test.sh
 .dockerignore
 
 # Logs
@@ -45,5 +42,3 @@ docker-test.sh
 npm-debug.log
 
 # Build artifacts (built fresh in container)
-dist/
-ui/public/

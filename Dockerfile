@@ -53,11 +53,7 @@ RUN python3 -m venv /opt/market-venv \
 
 ENV FREDY_PYTHON_BIN=/opt/market-venv/bin/python3
 
-COPY index.html vite.config.js ./
-COPY ui ./ui
 COPY lib ./lib
-
-RUN yarn build:frontend
 
 # Frontend dependencies are build-only; the compiled assets are already in
 # ui/public. Prune them before the runtime-only CloakBrowser install.
@@ -78,8 +74,6 @@ ENV HOME=/home/homeserver \
 # The ADD re-fetches the npm manifest on every build, so this layer's cache
 # busts exactly when a new CloakBrowser version is published — each deploy
 # rebuild then installs the latest release (bot-detection evasion decays fast).
-# Runs AFTER the frontend build: with NODE_ENV=production npm prunes the dev
-# dependencies (vite, less, ...) that the build still needs.
 # --legacy-peer-deps: pre-existing dev peer conflict (eslint 10 vs
 # eslint-plugin-react) otherwise aborts the install.
 ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json

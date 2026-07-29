@@ -28,7 +28,6 @@ async function getAllFiles(dir = '.') {
   return files;
 }
 
-/* eslint-disable no-console */
 async function addCopyright(files) {
   const oldCopyrightRegex =
     /^(\/\*\n \* Copyright \(c\) \d{4} by Christian Kellner\.\n \* Licensed under Apache-2.0 with Commons Clause and Attribution\/Naming Clause\n \*\/\n\n)+/;
@@ -46,7 +45,6 @@ async function addCopyright(files) {
     }
   }
 }
-/* eslint-enable no-console */
 
 const filesToProcess = process.argv.length > 2 ? process.argv.slice(2) : await getAllFiles();
 await addCopyright(filesToProcess);

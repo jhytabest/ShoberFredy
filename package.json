@@ -1,14 +1,11 @@
 {
   "name": "shoberfredy",
   "version": "1.0.0",
-  "description": "Personal real-estate listing pipeline with durable extraction, market scoring, deduplication, and Telegram delivery.",
+  "description": "Fredy searches ImmoScout24, Immowelt, Kleinanzeigen and WG-Gesucht for German rental listings and delivers them over Telegram.",
   "scripts": {
     "prepare": "husky",
     "start:backend": "NODE_ENV=production node index.js",
     "start:backend:dev": "nodemon --watch index.js --watch lib",
-    "start:frontend": "vite -m production",
-    "start:frontend:dev": "vite",
-    "build:frontend": "vite build",
     "format": "prettier --write \"**/*.js\"",
     "format:check": "prettier --check \"**/*.js\"",
     "lint": "eslint .",
@@ -21,32 +18,27 @@
   },
   "type": "module",
   "lint-staged": {
-    "*.{js,jsx}": [
+    "*.js": [
       "yarn lint",
       "yarn format",
       "yarn copyright"
     ]
-  },
-  "resolutions": {
-    "eslint-plugin-react/**/brace-expansion": "5.0.8",
-    "vite": "8.1.4"
   },
   "main": "index.js",
   "author": "Sebastien Michel and Shoberfredy contributors",
   "keywords": [
     "flat",
     "flatfinder",
-    "shoberfredy",
-    "real estates",
+    "real estate",
     "germany",
     "apartment",
-    "house",
     "rent",
     "immoscout",
     "kleinanzeigen",
-    "scraper",
     "immowelt",
-    "immobilienscout24"
+    "wg-gesucht",
+    "scraper",
+    "telegram"
   ],
   "bugs": {
     "url": "https://github.com/jhytabest/ShoberFredy/issues"
@@ -56,19 +48,8 @@
     "node": ">=22.0.0",
     "npm": ">=7.0.0"
   },
-  "browserslist": [
-    "> 0.5%",
-    "not dead",
-    "not ie 6-11",
-    "Firefox ESR"
-  ],
   "dependencies": {
-    "@fastify/cookie": "^11.1.2",
-    "@fastify/helmet": "^13.1.0",
-    "@fastify/session": "^11.1.2",
-    "@fastify/static": "^10.1.2",
     "@turf/boolean-point-in-polygon": "^7.3.5",
-    "adm-zip": "^0.6.0",
     "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
     "cloakbrowser": "^0.5.2",
@@ -77,34 +58,18 @@
     "node-cron": "^4.6.0",
     "node-fetch": "3.3.2",
     "p-throttle": "^8.1.0",
+    "puppeteer-core": "^25.4.0",
     "query-string": "9.4.1",
     "sharp": "^0.35.3"
   },
   "devDependencies": {
-    "@douyinfe/semi-icons": "^2.101.1",
-    "@douyinfe/semi-illustrations": "^2.101.1",
-    "@douyinfe/semi-ui-19": "^2.101.1",
     "@eslint/js": "^10.0.1",
-    "@mapbox/mapbox-gl-draw": "^1.5.1",
-    "@vitejs/plugin-react": "6.0.4",
-    "chart.js": "^4.5.1",
     "eslint": "10.8.0",
     "eslint-config-prettier": "10.1.8",
-    "eslint-plugin-react": "7.37.5",
     "globals": "^17.8.0",
     "husky": "9.1.7",
-    "less": "4.8.1",
     "lint-staged": "17.2.0",
-    "maplibre-gl": "^5.24.0",
     "nodemon": "^3.1.14",
-    "prettier": "3.9.6",
-    "puppeteer-core": "^25.4.0",
-    "react": "19.2.8",
-    "react-chartjs-2": "^5.3.1",
-    "react-dom": "19.2.8",
-    "react-range-slider-input": "^3.3.5",
-    "react-router-dom": "7.18.1",
-    "vite": "8.1.5",
-    "zustand": "^5.0.14"
+    "prettier": "3.9.6"
   }
 }

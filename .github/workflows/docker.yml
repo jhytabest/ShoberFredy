@@ -41,8 +41,6 @@ jobs:
       - name: Lint
         run: yarn lint
 
-      - name: Build frontend
-        run: yarn build:frontend
 
   build-and-push-image:
     needs: quality

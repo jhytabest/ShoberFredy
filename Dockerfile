@@ -44,23 +44,19 @@ RUN apt-get update \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 
-# Pinned venv for the market GBM trainer. If this venv is missing or broken
-# at runtime the GBM family simply skips training (the ridge family and the
-# whole scrape/notify pipeline are unaffected).
+# Pinned venv for the market GBM trainer. The requirements file is shared with
+# local setup so the container and a clean checkout cannot train on different
+# Python stacks.
+COPY tools/market/requirements.txt ./tools/market/requirements.txt
+
 RUN python3 -m venv /opt/market-venv \
-  && /opt/market-venv/bin/pip install --no-cache-dir numpy==2.4.6 lightgbm==4.6.0 \
+  && /opt/market-venv/bin/pip install --no-cache-dir -r tools/market/requirements.txt \
   && /opt/market-venv/bin/python3 -c "import lightgbm, numpy"
 
 ENV FREDY_PYTHON_BIN=/opt/market-venv/bin/python3
 
-COPY index.html vite.config.js ./
-COPY ui ./ui
 COPY lib ./lib
 
-RUN yarn build:frontend
-
-# Frontend dependencies are build-only; the compiled assets are already in
-# ui/public. Prune them before the runtime-only CloakBrowser install.
 RUN yarn install --frozen-lockfile --production --ignore-scripts \
   && yarn cache clean
 
@@ -78,10 +74,6 @@ ENV HOME=/home/homeserver \
 # The ADD re-fetches the npm manifest on every build, so this layer's cache
 # busts exactly when a new CloakBrowser version is published — each deploy
 # rebuild then installs the latest release (bot-detection evasion decays fast).
-# Runs AFTER the frontend build: with NODE_ENV=production npm prunes the dev
-# dependencies (vite, less, ...) that the build still needs.
-# --legacy-peer-deps: pre-existing dev peer conflict (eslint 10 vs
-# eslint-plugin-react) otherwise aborts the install.
 ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
 RUN npm install --no-audit --no-fund --no-save --legacy-peer-deps cloakbrowser@latest
 

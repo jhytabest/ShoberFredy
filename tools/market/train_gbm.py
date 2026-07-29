@@ -153,24 +153,19 @@ def main():
     if not params_splits or not calib_splits:
         raise ValueError("not enough rows per fold to cross-validate")
 
-    num_leaves_grid = NUM_LEAVES_GRID
-    min_data_grid = MIN_DATA_IN_LEAF_GRID
-    half_life_grid = HALF_LIFE_GRID_DAYS
-    max_rounds = MAX_ROUNDS
-
     # 1. Grid search on the median model.
     best = None
-    for half_life in half_life_grid:
+    for half_life in HALF_LIFE_GRID_DAYS:
         weights = recency_weights(age_days, half_life)
-        for num_leaves in num_leaves_grid:
-            for min_data in min_data_grid:
+        for num_leaves in NUM_LEAVES_GRID:
+            for min_data in MIN_DATA_IN_LEAF_GRID:
                 params = dict(
                     base_params(quantiles["mid"], seed),
                     num_leaves=num_leaves,
                     min_data_in_leaf=min_data,
                 )
                 iteration, loss = cv_best_iteration(
-                    X, y, weights, params_splits, params, feature_names, max_rounds
+                    X, y, weights, params_splits, params, feature_names, MAX_ROUNDS
                 )
                 if best is None or loss < best["loss"] - 1e-9:
                     best = {
@@ -194,7 +189,7 @@ def main():
             best_iterations[name] = best["mid_iterations"]
         else:
             best_iterations[name], _ = cv_best_iteration(
-                X, y, weights, params_splits, params, feature_names, max_rounds
+                X, y, weights, params_splits, params, feature_names, MAX_ROUNDS
             )
 
     # 3. Out-of-fold predictions on the calibration folds (frozen params).
@@ -250,7 +245,6 @@ if __name__ == "__main__":
         main()
     except Exception as error:  # noqa: BLE001 - report everything to Node
         try:
-            args = argparse.ArgumentParser()
             # Best effort: write the failure to --output so Node gets a reason.
             for i, token in enumerate(sys.argv):
                 if token == "--output" and i + 1 < len(sys.argv):

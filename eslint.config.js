@@ -3,45 +3,45 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-// eslint.config.js
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
-import react from 'eslint-plugin-react';
 
 export default [
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/public/**', 'db/**', 'conf/**'],
+    ignores: ['**/node_modules/**', 'db/**', 'conf/**'],
   },
 
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-      },
       globals: {
-        ...globals.browser,
         ...globals.node,
-        Promise: 'readonly',
         fetch: 'readonly',
       },
     },
-    plugins: { react },
-    settings: { react: { version: 'detect' } },
     rules: {
       ...js.configs.recommended.rules,
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
 
-  // Standalone CLIs/daemons report via stdout by design.
+  // Standalone CLIs and the maintenance toolkit report via stdout by design.
   {
-    files: ['tools/market/**/*.js', 'tools/migrate/**/*.js'],
+    files: ['tools/**/*.js', 'copyright.js'],
     rules: {
       'no-console': 'off',
+    },
+  },
+
+  // page.evaluate() bodies are serialised and run inside the headless browser,
+  // so they legitimately reference DOM globals that do not exist in Node.
+  {
+    files: ['lib/services/extractor/puppeteerExtractor.js'],
+    languageOptions: {
+      globals: { ...globals.browser },
     },
   },
 

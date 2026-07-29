@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "lint:fix": "yarn lint --fix",
     "migratedb": "node lib/services/storage/migrations/migrate.js",
-    "market:model": "node tools/market/marketModel.js run",
+    "market:setup": "python3 -m venv .market-venv && .market-venv/bin/pip install --disable-pip-version-check -r tools/market/requirements.txt",
     "market:exporter": "node tools/market/marketExporter.js",
     "maintenance": "node --env-file-if-exists=.env.local tools/maintenance/database.js",
     "copyright": "node ./copyright.js"

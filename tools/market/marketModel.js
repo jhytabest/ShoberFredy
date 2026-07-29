@@ -4,8 +4,8 @@
  */
 
 /*
- * CLI wrapper around lib/services/market/marketModel.js for manual runs and
- * status inspection. Scheduled training is owned by the API's single cron.
+ * Child-process entrypoint used by the durable market-model worker, plus
+ * read-only status inspection.
  *
  * Usage: node tools/market/marketModel.js [run|status]
  */

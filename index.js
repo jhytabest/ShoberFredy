@@ -17,11 +17,10 @@ import { startMarketModelScheduler } from './lib/services/market/marketModelSche
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
-import { markInterruptedLlmAudits } from './lib/services/pipeline/llmAuditStorage.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
+import { startMaintenanceWorker } from './lib/services/pipeline/maintenanceWorker.js';
 import { expectWorkers } from './lib/services/pipeline/workerSupervisor.js';
 import { env } from './lib/shared/env.js';
-import { reconcileTerminalPipeline } from './lib/services/pipeline/pipelineReconciler.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
@@ -50,10 +49,13 @@ await runMigrations();
 if (process.exitCode) {
   throw new Error('Database migrations failed; refusing to start against an incomplete schema.');
 }
-reconcileTerminalPipeline();
-const interruptedAudits = markInterruptedLlmAudits();
-if (interruptedAudits)
-  logger.warn(`Closed ${interruptedAudits} interrupted LLM audit call(s) from the previous process.`);
+// Nothing is repaired here. Two startup passes used to run before the workers:
+// one reasserted terminal filters over active detail rows, one closed LLM audit
+// calls left open by the previous process. Both existed because crash recovery
+// was per-queue and ad hoc. Work items now carry a lease, so anything the dead
+// process was holding is reclaimed by whichever worker polls next, with the
+// interrupted attempt counted — and a repair pass that has nothing to repair is
+// just a slower start and one more thing to keep correct.
 
 const settings = await getSettings();
 
@@ -74,17 +76,18 @@ await startHealthServer(settings.port || 9998);
 
 // Market services: the Prometheus exporter and CPU-heavy retraining run in
 // child processes so observability and model work cannot block the main loop.
-// Market training is the application's only cron. FREDY_MARKET_MODEL_CRON=0
-// disables it; all pipeline work is durable and event/queue driven.
+// The training cron only enqueues durable work; FREDY_MARKET_MODEL_CRON=0
+// disables that producer.
 try {
   await startMetricsExporterProcess();
 } catch (error) {
   logger.error('Failed to start market metrics exporter; continuing without it', error);
 }
 
+let marketModelWorker = null;
 if (env('FREDY_MARKET_MODEL_CRON') !== '0') {
   try {
-    await startMarketModelScheduler();
+    marketModelWorker = await startMarketModelScheduler();
   } catch (error) {
     logger.error('Failed to initialize market model; continuing without retrains', error);
   }
@@ -96,7 +99,13 @@ logger.info('Started successfully. Listings are delivered over Telegram; there i
 // awaited by scheduled scrape runs. Each returns its name when it actually
 // started, so the health endpoint can tell "disabled on purpose" apart from
 // "failed to start" instead of reporting an empty worker set as healthy.
-const startedWorkers = [startDetailFetchWorker({ providers }), startParserWorker(), startRatingWorker()];
+const startedWorkers = [
+  startDetailFetchWorker({ providers }),
+  startParserWorker(),
+  startRatingWorker(),
+  startMaintenanceWorker(),
+  marketModelWorker,
+];
 expectWorkers(startedWorkers.filter(Boolean));
 startNotificationDispatcher();
 

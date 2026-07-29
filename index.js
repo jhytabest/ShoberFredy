@@ -20,6 +20,7 @@ import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 import { markInterruptedLlmAudits } from './lib/services/pipeline/llmAuditStorage.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
 import { expectWorkers } from './lib/services/pipeline/workerSupervisor.js';
+import { env } from './lib/shared/env.js';
 import { reconcileTerminalPipeline } from './lib/services/pipeline/pipelineReconciler.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
@@ -83,7 +84,7 @@ try {
   logger.error('Failed to start market metrics exporter; continuing without it', error);
 }
 
-if (process.env.FREDY_MARKET_MODEL_CRON !== '0') {
+if (env('FREDY_MARKET_MODEL_CRON') !== '0') {
   try {
     await startMarketModelScheduler();
   } catch (error) {

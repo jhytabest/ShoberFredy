@@ -95,27 +95,105 @@ setting is the SQLite directory:
 
 ## Runtime controls
 
-The most useful environment settings are:
+Every environment variable the application reads is declared in
+`lib/shared/env.js`. Reading an undeclared name throws, so this table is
+generated from that registry rather than maintained alongside it — if a knob
+exists, it is listed here.
 
-| Setting                                      |          Default | Purpose                                         |
-| -------------------------------------------- | ---------------: | ----------------------------------------------- |
-| `FREDY_MARKET_MODEL_CRON`                    |      `0 2 * * *` | Daily market training schedule; `0` disables it |
-| `FREDY_MARKET_MODEL_RUN_TIMEOUT_MS`          |        `1800000` | Maximum training duration                       |
-| `FREDY_MARKET_EXPORTER_PORT`                 |           `9217` | Prometheus endpoint; `0` disables it            |
-| `FREDY_MARKET_INTERVAL_LEVEL`                |            `0.8` | Target prediction-interval coverage             |
-| `FREDY_LLM_DAILY_LIMIT`                      |           `1000` | Persistent UTC-day LLM request budget           |
-| `FREDY_LLM_VISION_ENABLED`                   |              `0` | Enable supplemental gallery analysis            |
-| `FREDY_LLM_MAX_TEXT_CHARS`                   |          `24000` | Maximum visible-text evidence per request       |
-| `FREDY_LLM_MAX_EMBEDDED_CHARS`               |          `24000` | Maximum embedded JSON evidence per request      |
-| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE`       |             `18` | Local LLM rate limit                            |
-| `FREDY_DISCOVERY_MAX_PAGES`                  | provider default | Maximum pages per provider run                  |
-| `FREDY_DETAIL_FETCH_ENABLED`                 |              `1` | Detail worker kill switch                       |
-| `FREDY_LLM_ENABLED` / `FREDY_PARSER_ENABLED` |              `1` | Parsing kill switches                           |
-| `FREDY_RATING_ENABLED`                       |              `1` | Rating worker kill switch                       |
-| `FREDY_NOTIFICATION_ENABLED`                 |              `1` | Notification worker kill switch                 |
+#### Credentials
 
-Worker idle delays, item deadlines, retry ceilings, and provider circuit
-breaker thresholds also have `FREDY_*` overrides in their owning modules.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GOOGLE_GEOCODING_API_KEY` | `(unset)` | Google Geocoding key. |
+| `OPENROUTER_API_KEY` | `(unset)` | OpenRouter key; required for LLM parsing. |
+
+#### Kill switches
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_DETAIL_FETCH_ENABLED` | `true` | Set 0 to stop draining detail work. |
+| `FREDY_LLM_ENABLED` | `true` | Set 0 to disable the LLM entirely (parsing stops). |
+| `FREDY_LLM_VISION_ENABLED` | `false` | Set 1 to enable supplemental vision analysis. |
+| `FREDY_MAINTENANCE_ENABLED` | `true` | Set 0 to stop scheduled maintenance work items. |
+| `FREDY_NOTIFICATION_ENABLED` | `true` | Set 0 to stop notification delivery. |
+| `FREDY_PARSER_ENABLED` | `true` | Set 0 to stop the LLM parser worker. |
+| `FREDY_RATING_ENABLED` | `true` | Set 0 to stop market rating. |
+
+#### Discovery and the work queue
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_DETAIL_ITEM_TIMEOUT_MS` | `300000` | Deadline for one detail capture. |
+| `FREDY_DETAIL_MAX_FAILURES` | `8` | Attempts before a detail item is abandoned. |
+| `FREDY_DISCOVERY_MAX_PAGES` | `20` | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
+| `FREDY_DISCOVERY_TIMEOUT_MS` | `120000` | Deadline for one provider discovery run. |
+| `FREDY_PARSER_ITEM_TIMEOUT_MS` | `300000` | Deadline for one parse (text + repair). |
+| `FREDY_PARSER_MAX_ITEM_FAILURES` | `8` | Attempts before a parse item is abandoned. |
+| `FREDY_RATING_ITEM_TIMEOUT_MS` | `30000` | Deadline for one market rating. |
+| `FREDY_WORK_IDLE_POLL_MS` | `1000` | Idle sleep between empty work-queue polls. |
+| `FREDY_WORK_MAX_BACKOFF_MS` | `3600000` | Ceiling on retry backoff for work items. |
+| `FREDY_WORKER_RESTART_DELAY_MS` | `5000` | Delay before restarting a crashed worker loop. |
+
+#### LLM
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_LLM_DAILY_LIMIT` | `1000` | Daily LLM request budget (UTC days). |
+| `FREDY_LLM_MAX_EMBEDDED_CHARS` | `24000` | Cap on embedded JSON sent to the LLM. |
+| `FREDY_LLM_MAX_LISTING_FAILURES` | `5` | LLM attempts before a listing is abandoned. |
+| `FREDY_LLM_MAX_TEXT_CHARS` | `24000` | Cap on captured page text sent to the LLM. |
+| `FREDY_LLM_REQUEST_TIMEOUT_MS` | `120000` | Deadline for a single LLM request. |
+| `FREDY_LLM_TEXT_MODEL` | _unset_ | OpenRouter model id for text extraction. |
+| `FREDY_LLM_UPSTREAM_BACKOFF_MS` | `60000` | Backoff after an upstream LLM rate limit. |
+| `FREDY_LLM_VISION_MAX_IMAGES` | `8` | Images sent per vision request. |
+| `FREDY_LLM_VISION_MODEL` | _unset_ | OpenRouter model id for image analysis. |
+| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18` | Client-side OpenRouter rate limit. |
+
+#### Filters and geocoding
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS` | `14` | Age at which a coarse geocode retries. |
+| `FREDY_PRELLM_AREA_MIN_PRECISION` | `house,street` | Geocode precisions confident enough to reject a listing before the LLM. |
+
+#### Provider circuit breaker
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_PROVIDER_BREAKER_COOLDOWN_MS` | `1800000` | Initial provider pause duration. |
+| `FREDY_PROVIDER_BREAKER_FAILURES` | `2` | Failures before a provider is paused. |
+| `FREDY_PROVIDER_BREAKER_MAX_COOLDOWN_MS` | `21600000` | Ceiling on provider pause. |
+
+#### Market model and metrics
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_MARKET_DB_PATH` | _unset_ | Override the market SQLite path (defaults to app db). |
+| `FREDY_MARKET_EXPORTER_PORT` | `9217` | Prometheus exporter port; 0 disables it. |
+| `FREDY_MARKET_INTERVAL_LEVEL` | `0.8` | Conformal interval coverage level. |
+| `FREDY_MARKET_MODEL_CRON` | `0 2 * * *` | Market training schedule; "0" disables training entirely. |
+| `FREDY_MARKET_MODEL_INTERVAL_SECONDS` | `86400` | Minimum seconds between retrains. |
+| `FREDY_MARKET_MODEL_RUN_TIMEOUT_MS` | `1800000` | Deadline for one retrain run. |
+| `FREDY_MARKET_SURFACE_MIN_CONFIDENCE` | `0.25` | Minimum surface-cell confidence. |
+| `FREDY_PYTHON_BIN` | `python3` | Python used for the LightGBM trainer. |
+
+#### Maintenance
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREDY_DB_VACUUM` | `false` | Set 1 to VACUUM during scheduled maintenance. |
+| `FREDY_LIVENESS_RECHECK_DAYS` | `7` | Age at which a listing is re-captured for liveness. |
+| `FREDY_MAINTENANCE_INTERVAL_MS` | `86400000` | Spacing between maintenance work items. |
+
+#### Runtime and tooling
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CLOAKBROWSER_BINARY_PATH` | _unset_ | Explicit CloakBrowser Chromium path. |
+| `CLOAKBROWSER_CACHE_DIR` | _unset_ | CloakBrowser download cache directory. |
+| `FREDY_DOCKER` | `false` | Set by the container image to signal a Docker deployment. |
+| `MIGRATION_ALLOW_CHECKSUM_UPDATE` | `false` | Permit rewriting the recorded checksum of an applied migration. |
+| `NODE_ENV` | `development` | Node environment; "production" quiets debug logging. |
 
 ## Local development
 

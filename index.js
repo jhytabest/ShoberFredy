@@ -19,6 +19,7 @@ import { startNotificationDispatcher } from './lib/services/pipeline/notificatio
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 import { markInterruptedLlmAudits } from './lib/services/pipeline/llmAuditStorage.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
+import { expectWorkers } from './lib/services/pipeline/workerSupervisor.js';
 import { reconcileTerminalPipeline } from './lib/services/pipeline/pipelineReconciler.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
@@ -93,10 +94,11 @@ if (process.env.FREDY_MARKET_MODEL_CRON !== '0') {
 logger.info(`Started Fredy successfully. Ui can be accessed via http://localhost:${settings.port}`);
 
 // Independent durable consumers start before the scrape producer. Neither is
-// awaited by scheduled scrape runs.
-startDetailFetchWorker({ providers });
-startParserWorker();
-startRatingWorker();
+// awaited by scheduled scrape runs. Each returns its name when it actually
+// started, so the health endpoint can tell "disabled on purpose" apart from
+// "failed to start" instead of reporting an empty worker set as healthy.
+const startedWorkers = [startDetailFetchWorker({ providers }), startParserWorker(), startRatingWorker()];
+expectWorkers(startedWorkers.filter(Boolean));
 startNotificationDispatcher();
 
 // Initialize the scrape/capture producer (schedules and bus listeners).

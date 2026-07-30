@@ -8,6 +8,19 @@ name: Build and publish Docker image
 # holds `packages: write` and a token that dispatches a production deployment,
 # so a retagged upstream action would be able to publish and roll out a
 # malicious image without review.
+#
+# The daily schedule exists for CloakBrowser. The Dockerfile installs it
+# unpinned and busts that layer's cache whenever npm publishes a new version,
+# but a build only ever ran on a source push — so between commits the deployed
+# stealth Chromium aged indefinitely while bot detection moved on. The schedule
+# decouples "browser is current" from "someone changed the code".
+#
+# Daily rather than weekly because upstream ships that often: 0.5.1 on
+# 2026-07-23, 0.5.2 on 07-25, 0.5.3 on 07-30. A weekly cadence would routinely
+# run a release or two behind, which is the whole failure being fixed. Nothing
+# else in the image drifts — every other dependency is lockfile-pinned — so a
+# run with no new release rebuilds entirely from cache and redeploys an
+# identical image.
 
 on:
   push:
@@ -15,6 +28,10 @@ on:
       - 'master'
     tags:
       - '*'
+  schedule:
+    # 03:17 UTC — clear of the 02:00 UTC market-model retrain so a redeploy
+    # cannot terminate a training child process mid-run.
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 env:
@@ -67,11 +84,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Tags are spelled out rather than left to the action's defaults, which
+      # emit `nightly` for a schedule event and no branch tag at all. The
+      # deployment dispatch below hands the homeserver `:master`, so a scheduled
+      # CloakBrowser rebuild has to land on that same tag or it would publish an
+      # image nothing ever pulls.
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=master,enable=${{ github.ref == 'refs/heads/master' }}
 
       # Homeserver is a single amd64 box; skipping arm64 halves build time.
       - name: Build Docker image for verification

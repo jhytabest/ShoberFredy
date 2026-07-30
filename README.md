@@ -116,7 +116,6 @@ exists, it is listed here.
 | --- | --- | --- |
 | `FREDY_DETAIL_FETCH_ENABLED` | `true` | Set 0 to stop draining detail work. |
 | `FREDY_LLM_ENABLED` | `true` | Set 0 to disable the LLM entirely (parsing stops). |
-| `FREDY_LLM_VISION_ENABLED` | `false` | Set 1 to enable supplemental vision analysis. |
 | `FREDY_MAINTENANCE_ENABLED` | `true` | Set 0 to stop scheduled maintenance work items. |
 | `FREDY_NOTIFICATION_ENABLED` | `true` | Set 0 to stop notification delivery. |
 | `FREDY_PARSER_ENABLED` | `true` | Set 0 to stop the LLM parser worker. |
@@ -149,8 +148,6 @@ exists, it is listed here.
 | `FREDY_LLM_REQUEST_TIMEOUT_MS` | `120000` | Deadline for a single LLM request. |
 | `FREDY_LLM_TEXT_MODEL` | _unset_ | OpenRouter model id for text extraction. |
 | `FREDY_LLM_UPSTREAM_BACKOFF_MS` | `60000` | Backoff after an upstream LLM rate limit. |
-| `FREDY_LLM_VISION_MAX_IMAGES` | `8` | Images sent per vision request. |
-| `FREDY_LLM_VISION_MODEL` | _unset_ | OpenRouter model id for image analysis. |
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18` | Client-side OpenRouter rate limit. |
 
 #### Filters and geocoding

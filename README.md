@@ -71,7 +71,10 @@ docker run -d --name shoberfredy \
 ```
 
 The only HTTP surface is the health endpoint at
-<http://localhost:9998/health>; listings are delivered through Telegram.
+<http://localhost:9998/health>; listings are delivered through Telegram. Besides
+liveness it reports, without either being able to fail a deploy, how long ago
+each provider last returned listings and the data-integrity verdict scheduled
+maintenance last recorded.
 The image runs as UID/GID `10001`; the supplied Compose file also uses a
 read-only root filesystem, drops Linux capabilities, and enables
 `no-new-privileges`.
@@ -256,8 +259,15 @@ yarn maintenance status
 
 `status` checks the migration ledger, SQLite integrity, foreign keys, queue
 state, claim coverage, audit relationships, and full-text coverage. Dedupe,
-payload compaction, orphan-media cleanup, and optional vacuuming have no manual
-mutation path.
+payload compaction, orphan-media cleanup, terminal work-row pruning, and optional
+vacuuming have no manual mutation path.
+
+The scheduled pass records its verdict, and `/health` serves that recorded
+verdict with its age rather than recomputing an integrity check on every liveness
+probe — the two surfaces report one answer about one database. Finished work rows
+are pruned after 30 days; anything still pending, retrying or leased is never
+touched. Orphaned media are images no `listing_images` row references, so the
+first pass after a long gap can remove a great deal at once.
 
 ## Provider notes
 
@@ -271,3 +281,11 @@ socks5://user:pass@host:port
 ```
 
 Leave the setting empty to connect directly.
+
+Immowelt declares `requiresProxy` in its provider metadata, so it is the one
+provider that will not run without one: on a bare datacenter IP it answers every
+search with an HTTP 403 bot challenge and no cards, which is indistinguishable
+from changed markup and drives the circuit breaker to its six-hour ceiling.
+While `proxyUrl` is empty, discovery skips Immowelt and already-queued Immowelt
+detail captures wait rather than spending their failure budget. Filling the
+setting in resumes both on the next run — no restart, no queue surgery.

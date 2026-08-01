@@ -111,10 +111,17 @@ const insertText = target.prepare(
   `INSERT INTO listing_texts (listing_id, full_text, content_hash, captured_at)
    VALUES (?, ?, ?, ?) ON CONFLICT(listing_id) DO NOTHING`,
 );
+// `notified_at` is set on every restored verdict, and that is the point rather
+// than an accident. A restored verdict has a NULL configuration hash, so the gate
+// declines and the advert is re-decided on its next sighting — and if it is still
+// on the market and still accepted, the pipeline would announce it again. It was
+// announced months ago. The timestamp is the decision time rather than the real
+// delivery time, which is unknown and does not matter: the flag answers "has this
+// already been sent", not "when".
 const insertVerdict = target.prepare(
   `INSERT INTO listing_verdicts (listing_id, job_id, verdict, reason, stage, config_hash,
-                                 evidence_kind, evidence_hash, decided_at)
-   VALUES (?, ?, ?, ?, 'extraction', NULL, 'final', NULL, ?)
+                                 evidence_kind, evidence_hash, decided_at, notified_at)
+   VALUES (?, ?, ?, ?, 'extraction', NULL, 'final', NULL, ?, ?)
    ON CONFLICT(listing_id, job_id) DO NOTHING`,
 );
 const insertClaim = target.prepare(
@@ -139,7 +146,7 @@ target.transaction(() => {
     if (row.full_text) insertText.run(row.id, row.full_text, row.content_hash ?? '', row.captured_at ?? createdAt);
 
     const reason = row.hidden_reason ? (REASONS[row.hidden_reason] ?? 'no_detail') : null;
-    insertVerdict.run(row.id, row.job_id, reason ? 'rejected' : 'accepted', reason, createdAt);
+    insertVerdict.run(row.id, row.job_id, reason ? 'rejected' : 'accepted', reason, createdAt, createdAt);
 
     // The claims are what stop a still-live advert being fetched and extracted a
     // second time. Only the two the snapshot can state exactly; resemblance
@@ -152,7 +159,8 @@ target.transaction(() => {
 
 snapshot.close();
 logger.info(`Restored ${restored} listings with ${claims} claims; skipped ${skipped} whose job no longer exists.`);
-logger.info('Their verdicts carry no configuration hash, so every one will be re-decided on its next sighting.');
+logger.info('Their verdicts carry no configuration hash, so every one is re-decided on its next sighting,');
+logger.info('and all are marked as already announced, so a still-live one is not sent twice.');
 
 function tableExists(db, name) {
   return Boolean(db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));

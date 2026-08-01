@@ -36,13 +36,54 @@ than running repair scripts.
 The market cron only produces a durable work item; it never performs training
 itself. Dedupe and filtering are pipeline stages, not maintenance commands.
 
+### One advert, one extraction, one verdict per job
+
+Work is keyed by advert, not by (job, advert). Three searches that all find the
+same flat meet at the same `pipeline_work` row, so it is fetched once and given
+to the LLM once. What differs per job is the *verdict*, and that is a row in
+`listing_verdicts` — so a flat inside one search's polygon and outside another's
+is accepted by the first and rejected by the second, without either one hiding
+or reviving the listing on the other's behalf.
+
+Every stage asks the same question before it spends anything: has this advert
+already been decided, under this job's configuration, on evidence that has not
+changed? The answer is stored against the advert's identity claims and is
+consulted at discovery, at detail capture, before the LLM call, and before
+rating.
+
+Filtering is deliberately uneven, because the stages differ in what they cost:
+
+| Stage | Filters on | Costs |
+| --- | --- | --- |
+| Card | Blacklist and specification, over what the card states | nothing |
+| Detail | Geography only | the page fetch, which extraction needs anyway |
+| Extraction | Structured LLM fields, plus one re-geocoded area check | one LLM call |
+
+There is no text matching after extraction. The model already answers "is this a
+swap, a sublet, a WG room, furnished, fixed-term?" as validated enum fields, and
+grepping the page for the same thing asks twice and believes the worse answer.
+
+An advert refused before extraction never becomes a listing. It is recorded in
+`source_rejections` together with the claims that identify it, which is what
+stops it being fetched and refused again on the next capture whose page text
+differs.
+
 ## Data policy
 
 The SQLite schema has one current migration:
 `lib/services/storage/migrations/sql/100.current-schema.js`. It creates a clean
-database from scratch and reconciles an existing production database in place
-without deleting listings.
+database from scratch, and converts the one shape that preceded it — the release
+where a listing carried its own verdict — in place. That conversion moves
+never-extracted rejections out of `listings` into `source_rejections`,
+synthesises a per-job verdict for every surviving listing from what the old
+schema recorded, and merges rows that were separate only because two jobs found
+the same advert. Foreign keys are suspended while it runs, because a table whose
+shape must change has to be rebuilt, and referential integrity is asserted before
+it commits.
 
+- `listings` holds extractions only. A listing exists once the LLM has read the
+  advert; what each job decided about it is a `listing_verdicts` row, and an
+  advert refused before extraction is a `source_rejections` row instead.
 - `listing_texts` permanently keeps one richest full-text capture per listing.
   Transient queue copies are cleared after the listing reaches a terminal
   state.
@@ -225,27 +266,31 @@ migration path, and requires a healthy `/health` response before publishing.
 
 ## Production-state Docker mirror
 
-The `hs` deployment can be copied into the ignored `.live-mirror` directory
-without stopping or writing to production:
+The live database can be snapshotted into `db/listings.db` without stopping or
+writing to production:
 
 ```bash
-tools/mirror-live.sh refresh
+tools/mirror-live.sh
 ```
 
-This uses SQLite's online backup API, copies media/configuration/runtime state,
-and runs the exact deployed amd64 image at <http://127.0.0.1:19998>. The
-application container is isolated on an internal Docker network and uses an
-API-only entrypoint, so discovery, workers, LLM/geocoding calls, training, and
-notifications cannot run locally.
+It runs `VACUUM INTO` inside the live container over SSH — a plain file copy of a
+WAL-mode database silently drops whatever is still in the write-ahead log — then
+downloads the result and removes the remote temporary file. The source is opened
+read-only. Set `SHOBERFREDY_MIRROR_HOST` (default `hs`) and
+`SHOBERFREDY_MIRROR_CONTAINER` (default `fredy`) to point it elsewhere.
+
+This is the only place a schema change is exercised against real data. CI builds
+the image and requires a healthy `/health`, but it does so against an empty
+database, so it validates migration-from-scratch and nothing else.
 
 ```bash
-tools/mirror-live.sh sync
-tools/mirror-live.sh up
-tools/mirror-live.sh status
-tools/mirror-live.sh down
+tools/mirror-live.sh                       # snapshot production
+cp db/listings.db ~/pre-migration.db       # before anything destructive
+yarn migratedb                             # the real migration path
+yarn maintenance status                    # exit 0 == healthy
 ```
 
-The mirror contains durable state, not process memory, open connections,
+The snapshot contains durable state, not process memory, open connections, or
 in-flight requests.
 
 ## Maintenance

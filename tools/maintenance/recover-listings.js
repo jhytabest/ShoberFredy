@@ -3,12 +3,6 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-#!/usr/bin/env node
-/*
- * Copyright (c) 2026 by Christian Kellner.
- * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
- */
-
 import Database from 'better-sqlite3';
 import SqliteConnection, { computeDbPath } from '../../lib/services/storage/SqliteConnection.js';
 import { refreshConfig } from '../../lib/utils.js';

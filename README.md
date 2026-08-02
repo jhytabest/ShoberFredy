@@ -180,25 +180,27 @@ exists, it is listed here.
 
 #### Discovery and the work queue
 
-| Variable                            | Default    | Purpose                                                                          |
-| ----------------------------------- | ---------- | -------------------------------------------------------------------------------- |
-| `FREDY_DETAIL_ITEM_TIMEOUT_MS`      | `300000`   | Deadline for one detail capture.                                                 |
-| `FREDY_DETAIL_MAX_FAILURES`         | `8`        | Attempts before a detail item is abandoned.                                      |
-| `FREDY_DISCOVERY_MAX_PAGES`         | `20`       | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
-| `FREDY_DISCOVERY_TIMEOUT_MS`        | `120000`   | Deadline for one provider discovery run.                                         |
-| `FREDY_PARSER_ITEM_TIMEOUT_MS`      | `300000`   | Deadline for one parse (text + repair).                                          |
-| `FREDY_PARSER_MAX_ITEM_FAILURES`    | `8`        | Attempts before a parse item is abandoned.                                       |
-| `FREDY_RATING_ITEM_TIMEOUT_MS`      | `30000`    | Deadline for one market rating.                                                  |
-| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS` | `1800000`  | Deadline for automatic database upkeep.                                          |
-| `FREDY_WORK_IDLE_POLL_MS`           | `1000`     | Idle sleep between empty work-queue polls.                                       |
-| `FREDY_WORK_MAX_BACKOFF_MS`         | `3600000`  | Ceiling on retry backoff for work items.                                         |
-| `FREDY_WORK_MAX_DEFERRALS`          | `24`       | Parks on a resource before work is abandoned.                                    |
-| `FREDY_WORK_MAX_PARK_MS`            | `86400000` | Age at which parked work is abandoned regardless of park count.                  |
-| `FREDY_RATE_MAX_FAILURES`           | `5`        | Attempts before a rating item is abandoned.                                      |
-| `FREDY_MAINTENANCE_MAX_FAILURES`    | `3`        | Attempts before a maintenance item is abandoned.                                 |
-| `FREDY_MARKET_MODEL_MAX_FAILURES`   | `3`        | Attempts before a training item is abandoned.                                    |
-| `FREDY_NOTIFY_MAX_FAILURES`         | `6`        | Attempts before a notification is abandoned.                                     |
-| `FREDY_WORKER_RESTART_DELAY_MS`     | `5000`     | Delay before restarting a crashed worker loop.                                   |
+| Variable                             | Default    | Purpose                                                                          |
+| ------------------------------------ | ---------- | -------------------------------------------------------------------------------- |
+| `FREDY_DETAIL_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one detail capture.                                                 |
+| `FREDY_DETAIL_MAX_FAILURES`          | `8`        | Attempts before a detail item is abandoned.                                      |
+| `FREDY_DISCOVERY_MAX_PAGES`          | `20`       | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
+| `FREDY_DISCOVERY_TIMEOUT_MS`         | `120000`   | Deadline for one provider discovery run.                                         |
+| `FREDY_PARSER_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one parse (text + repair).                                          |
+| `FREDY_PARSER_MAX_ITEM_FAILURES`     | `8`        | Attempts before a parse item is abandoned.                                       |
+| `FREDY_NOTIFICATION_ITEM_TIMEOUT_MS` | `120000`   | Deadline for one notification digest.                                            |
+| `FREDY_NOTIFICATION_BATCH_SIZE`      | `50`       | Deliveries considered for one digest.                                            |
+| `FREDY_RATING_ITEM_TIMEOUT_MS`       | `30000`    | Deadline for one market rating.                                                  |
+| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS`  | `1800000`  | Deadline for automatic database upkeep.                                          |
+| `FREDY_WORK_IDLE_POLL_MS`            | `1000`     | Idle sleep between empty work-queue polls.                                       |
+| `FREDY_WORK_MAX_BACKOFF_MS`          | `3600000`  | Ceiling on retry backoff for work items.                                         |
+| `FREDY_WORK_MAX_DEFERRALS`           | `24`       | Parks on a resource before work is abandoned.                                    |
+| `FREDY_WORK_MAX_PARK_MS`             | `86400000` | Age at which parked work is abandoned regardless of park count.                  |
+| `FREDY_RATE_MAX_FAILURES`            | `5`        | Attempts before a rating item is abandoned.                                      |
+| `FREDY_MAINTENANCE_MAX_FAILURES`     | `3`        | Attempts before a maintenance item is abandoned.                                 |
+| `FREDY_MARKET_MODEL_MAX_FAILURES`    | `3`        | Attempts before a training item is abandoned.                                    |
+| `FREDY_NOTIFY_MAX_FAILURES`          | `6`        | Attempts before a notification is abandoned.                                     |
+| `FREDY_WORKER_RESTART_DELAY_MS`      | `5000`     | Delay before restarting a crashed worker loop.                                   |
 
 #### LLM
 

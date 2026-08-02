@@ -27,3 +27,5 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      - name: Validate monitoring dashboard
+        run: jq empty monitoring/grafana-dashboard.json

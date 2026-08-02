@@ -52,7 +52,7 @@
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
-    "cloakbrowser": "^0.5.2",
+    "cloakbrowser": "0.5.3",
     "fastify": "^5.10.0",
     "nanoid": "5.1.16",
     "node-cron": "^4.6.0",

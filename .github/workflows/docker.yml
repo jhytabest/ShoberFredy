@@ -1,26 +1,11 @@
 name: Build and publish Docker image
 
 # Builds ghcr.io/jhytabest/shoberfredy on every master push (and tags).
-# Deployment to the homeserver stays in the homeserver repo: its
-# services/fredy compose pulls this image instead of patching upstream.
+# Deployment to the homeserver stays in the homeserver repo, where Renovate
+# advances the published master digest through the normal release path.
 #
-# Every third-party action is pinned to a commit SHA, not a tag. This workflow
-# holds `packages: write` and a token that dispatches a production deployment,
-# so a retagged upstream action would be able to publish and roll out a
-# malicious image without review.
-#
-# The daily schedule exists for CloakBrowser. The Dockerfile installs it
-# unpinned and busts that layer's cache whenever npm publishes a new version,
-# but a build only ever ran on a source push — so between commits the deployed
-# stealth Chromium aged indefinitely while bot detection moved on. The schedule
-# decouples "browser is current" from "someone changed the code".
-#
-# Daily rather than weekly because upstream ships that often: 0.5.1 on
-# 2026-07-23, 0.5.2 on 07-25, 0.5.3 on 07-30. A weekly cadence would routinely
-# run a release or two behind, which is the whole failure being fixed. Nothing
-# else in the image drifts — every other dependency is lockfile-pinned — so a
-# run with no new release rebuilds entirely from cache and redeploys an
-# identical image.
+# Every third-party action is pinned to a commit SHA, not a tag. CloakBrowser
+# is lockfile-pinned too and updated by Renovate, so every image is reproducible.
 
 on:
   push:
@@ -28,10 +13,6 @@ on:
       - 'master'
     tags:
       - '*'
-  schedule:
-    # 03:17 UTC — clear of the 02:00 UTC market-model retrain so a redeploy
-    # cannot terminate a training child process mid-run.
-    - cron: '17 3 * * *'
   workflow_dispatch:
 
 env:
@@ -57,6 +38,9 @@ jobs:
 
       - name: Lint
         run: yarn lint
+
+      - name: Validate monitoring dashboard
+        run: jq empty monitoring/grafana-dashboard.json
 
 
   build-and-push-image:
@@ -84,11 +68,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tags are spelled out rather than left to the action's defaults, which
-      # emit `nightly` for a schedule event and no branch tag at all. The
-      # deployment dispatch below hands the homeserver `:master`, so a scheduled
-      # CloakBrowser rebuild has to land on that same tag or it would publish an
-      # image nothing ever pulls.
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
@@ -151,14 +130,3 @@ jobs:
           while IFS= read -r tag; do
             [ -n "$tag" ] && docker push "$tag"
           done <<< "$IMAGE_TAGS"
-
-      - name: Trigger Fredy-only homeserver deployment
-        if: github.ref == 'refs/heads/master'
-        env:
-          GH_TOKEN: ${{ secrets.HOMESERVER_DISPATCH_TOKEN }}
-        run: |
-          jq -n \
-            --arg source_sha "$GITHUB_SHA" \
-            --arg image "ghcr.io/${GITHUB_REPOSITORY}:master" \
-            '{event_type:"shoberfredy_image_published",client_payload:{source_sha:$source_sha,image:$image}}' \
-            | gh api --method POST /repos/jhytabest/homeserver/dispatches --input -

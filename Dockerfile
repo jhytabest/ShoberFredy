@@ -1,4 +1,9 @@
-FROM node:22-slim
+FROM node:22-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46
+
+LABEL io.homeserver.monitoring.service="fredy" \
+      io.homeserver.monitoring.metrics-port="9217" \
+      io.homeserver.monitoring.metrics-path="/metrics" \
+      io.homeserver.monitoring.dashboard="/opt/homeserver-monitoring/grafana-dashboard.json"
 
 # System deps for CloakBrowser + build tools for native modules (better-sqlite3)
 # fonts-* packages below are CloakBrowser's recommended Linux font set
@@ -38,7 +43,8 @@ COPY package.json yarn.lock ./
 RUN apt-get update \
   && apt-get install -y --no-install-recommends make g++ \
   && yarn config set network-timeout 600000 \
-  && yarn --frozen-lockfile --production=false \
+  && yarn --frozen-lockfile --production --ignore-scripts \
+  && npm rebuild better-sqlite3 sharp \
   && yarn cache clean \
   && apt-get purge -y make g++ \
   && apt-get autoremove -y \
@@ -57,9 +63,6 @@ ENV FREDY_PYTHON_BIN=/opt/market-venv/bin/python3
 
 COPY lib ./lib
 
-RUN yarn install --frozen-lockfile --production --ignore-scripts \
-  && yarn cache clean
-
 # Create the runtime identity before downloading browser state so both the
 # bundled binary and fresh anonymous /db and /conf volumes are usable without
 # root.
@@ -71,18 +74,13 @@ ENV HOME=/home/homeserver \
     XDG_CACHE_HOME=/home/homeserver/.cache \
     XDG_CONFIG_HOME=/home/homeserver/.config
 
-# The ADD re-fetches the npm manifest on every build, so this layer's cache
-# busts exactly when a new CloakBrowser version is published — each deploy
-# rebuild then installs the latest release (bot-detection evasion decays fast).
-ADD https://registry.npmjs.org/cloakbrowser/latest /tmp/cloakbrowser-latest.json
-RUN npm install --no-audit --no-fund --no-save --legacy-peer-deps cloakbrowser@latest
-
 # Pre-download the CloakBrowser stealth Chromium binary (supports x86_64 and arm64)
 RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())" \
   && chown -R 10001:10001 /home/homeserver
 
 COPY index.js ./
 COPY tools ./tools
+COPY monitoring/grafana-dashboard.json /opt/homeserver-monitoring/grafana-dashboard.json
 
 RUN ln -s /db /fredy/db \
   && ln -s /conf /fredy/conf

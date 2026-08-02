@@ -7,9 +7,16 @@
       "rangeStrategy": "bump"
     },
     {
-      "description": "CloakBrowser is installed unpinned at build time on purpose (bot-detection evasion decays); Renovate must not fight the Dockerfile over it.",
-      "matchPackageNames": ["cloakbrowser"],
-      "enabled": false
+      "description": "Automatically ship backwards-compatible updates after CI passes.",
+      "matchUpdateTypes": ["digest", "pin", "pinDigest", "patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Keep unrelated updates independently attributable and reversible.",
+      "matchPackageNames": ["*"],
+      "groupName": null
     }
   ]
 }

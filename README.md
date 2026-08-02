@@ -89,6 +89,14 @@ it commits.
 - `listings` holds extractions only. A listing exists once the LLM has read the
   advert; what each job decided about it is a `listing_verdicts` row, and an
   advert refused before extraction is a `source_rejections` row instead.
+- A listing that stops being advertised becomes `gone`. Scheduled maintenance
+  re-fetches the oldest still-active listings; the probe is a page fetch and
+  nothing else, so confirming a flat is still up costs no LLM call.
+- Blacklist terms are one deployment-wide setting. Jobs carry only the two
+  things that are genuinely theirs, a spatial filter and a specification.
+- `pipeline_work.status` is lifecycle only. What became of an item is `outcome`,
+  why is `outcome_code` from a closed vocabulary, and `last_error` holds an
+  exception message or nothing at all.
 - `listing_texts` permanently keeps one richest full-text capture per listing.
   Transient queue copies are cleared after the listing reaches a terminal
   state.
@@ -172,19 +180,25 @@ exists, it is listed here.
 
 #### Discovery and the work queue
 
-| Variable                            | Default   | Purpose                                                                          |
-| ----------------------------------- | --------- | -------------------------------------------------------------------------------- |
-| `FREDY_DETAIL_ITEM_TIMEOUT_MS`      | `300000`  | Deadline for one detail capture.                                                 |
-| `FREDY_DETAIL_MAX_FAILURES`         | `8`       | Attempts before a detail item is abandoned.                                      |
-| `FREDY_DISCOVERY_MAX_PAGES`         | `20`      | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
-| `FREDY_DISCOVERY_TIMEOUT_MS`        | `120000`  | Deadline for one provider discovery run.                                         |
-| `FREDY_PARSER_ITEM_TIMEOUT_MS`      | `300000`  | Deadline for one parse (text + repair).                                          |
-| `FREDY_PARSER_MAX_ITEM_FAILURES`    | `8`       | Attempts before a parse item is abandoned.                                       |
-| `FREDY_RATING_ITEM_TIMEOUT_MS`      | `30000`   | Deadline for one market rating.                                                  |
-| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS` | `1800000` | Deadline for automatic database upkeep.                                          |
-| `FREDY_WORK_IDLE_POLL_MS`           | `1000`    | Idle sleep between empty work-queue polls.                                       |
-| `FREDY_WORK_MAX_BACKOFF_MS`         | `3600000` | Ceiling on retry backoff for work items.                                         |
-| `FREDY_WORKER_RESTART_DELAY_MS`     | `5000`    | Delay before restarting a crashed worker loop.                                   |
+| Variable                            | Default    | Purpose                                                                          |
+| ----------------------------------- | ---------- | -------------------------------------------------------------------------------- |
+| `FREDY_DETAIL_ITEM_TIMEOUT_MS`      | `300000`   | Deadline for one detail capture.                                                 |
+| `FREDY_DETAIL_MAX_FAILURES`         | `8`        | Attempts before a detail item is abandoned.                                      |
+| `FREDY_DISCOVERY_MAX_PAGES`         | `20`       | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
+| `FREDY_DISCOVERY_TIMEOUT_MS`        | `120000`   | Deadline for one provider discovery run.                                         |
+| `FREDY_PARSER_ITEM_TIMEOUT_MS`      | `300000`   | Deadline for one parse (text + repair).                                          |
+| `FREDY_PARSER_MAX_ITEM_FAILURES`    | `8`        | Attempts before a parse item is abandoned.                                       |
+| `FREDY_RATING_ITEM_TIMEOUT_MS`      | `30000`    | Deadline for one market rating.                                                  |
+| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS` | `1800000`  | Deadline for automatic database upkeep.                                          |
+| `FREDY_WORK_IDLE_POLL_MS`           | `1000`     | Idle sleep between empty work-queue polls.                                       |
+| `FREDY_WORK_MAX_BACKOFF_MS`         | `3600000`  | Ceiling on retry backoff for work items.                                         |
+| `FREDY_WORK_MAX_DEFERRALS`          | `24`       | Parks on a resource before work is abandoned.                                    |
+| `FREDY_WORK_MAX_PARK_MS`            | `86400000` | Age at which parked work is abandoned regardless of park count.                  |
+| `FREDY_RATE_MAX_FAILURES`           | `5`        | Attempts before a rating item is abandoned.                                      |
+| `FREDY_MAINTENANCE_MAX_FAILURES`    | `3`        | Attempts before a maintenance item is abandoned.                                 |
+| `FREDY_MARKET_MODEL_MAX_FAILURES`   | `3`        | Attempts before a training item is abandoned.                                    |
+| `FREDY_NOTIFY_MAX_FAILURES`         | `6`        | Attempts before a notification is abandoned.                                     |
+| `FREDY_WORKER_RESTART_DELAY_MS`     | `5000`     | Delay before restarting a crashed worker loop.                                   |
 
 #### LLM
 
@@ -201,17 +215,19 @@ exists, it is listed here.
 
 #### Filters and geocoding
 
-| Variable                                 | Default | Purpose                                |
-| ---------------------------------------- | ------- | -------------------------------------- |
-| `FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS` | `14`    | Age at which a coarse geocode retries. |
+| Variable                                 | Default | Purpose                                                                                  |
+| ---------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS` | `14`    | Age at which a coarse geocode retries.                                                   |
+| `FREDY_CARD_FILTER_AUDIT_RATE`           | `0.03`  | Fraction of card-stage refusals let through to extraction so the refusal can be checked. |
 
 #### Provider circuit breaker
 
-| Variable                                 | Default    | Purpose                               |
-| ---------------------------------------- | ---------- | ------------------------------------- |
-| `FREDY_PROVIDER_BREAKER_COOLDOWN_MS`     | `1800000`  | Initial provider pause duration.      |
-| `FREDY_PROVIDER_BREAKER_FAILURES`        | `2`        | Failures before a provider is paused. |
-| `FREDY_PROVIDER_BREAKER_MAX_COOLDOWN_MS` | `21600000` | Ceiling on provider pause.            |
+| Variable                                 | Default    | Purpose                                                                           |
+| ---------------------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `FREDY_PROVIDER_BREAKER_COOLDOWN_MS`     | `1800000`  | Initial provider pause duration.                                                  |
+| `FREDY_PROVIDER_BREAKER_FAILURES`        | `2`        | Failed discovery runs before a provider is paused.                                |
+| `FREDY_PROVIDER_BREAKER_ITEM_CHALLENGES` | `8`        | Challenged single requests, with no success between, before a provider is paused. |
+| `FREDY_PROVIDER_BREAKER_MAX_COOLDOWN_MS` | `21600000` | Ceiling on provider pause.                                                        |
 
 #### Market model and metrics
 
@@ -228,10 +244,12 @@ exists, it is listed here.
 
 #### Maintenance
 
-| Variable                        | Default    | Purpose                                       |
-| ------------------------------- | ---------- | --------------------------------------------- |
-| `FREDY_DB_VACUUM`               | `false`    | Set 1 to VACUUM during scheduled maintenance. |
-| `FREDY_MAINTENANCE_INTERVAL_MS` | `86400000` | Spacing between maintenance work items.       |
+| Variable                         | Default     | Purpose                                                                      |
+| -------------------------------- | ----------- | ---------------------------------------------------------------------------- |
+| `FREDY_DB_VACUUM`                | `false`     | Set 1 to VACUUM during scheduled maintenance.                                |
+| `FREDY_MAINTENANCE_INTERVAL_MS`  | `86400000`  | Spacing between maintenance work items.                                      |
+| `FREDY_LIVENESS_CHECKS_PER_PASS` | `200`       | Stale listings re-fetched per pass to see whether they are gone. 0 disables. |
+| `FREDY_LIVENESS_STALE_AFTER_MS`  | `604800000` | Age at which an active listing is re-checked for liveness.                   |
 
 #### Runtime and tooling
 

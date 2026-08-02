@@ -40,7 +40,7 @@ itself. Dedupe and filtering are pipeline stages, not maintenance commands.
 
 Work is keyed by advert, not by (job, advert). Three searches that all find the
 same flat meet at the same `pipeline_work` row, so it is fetched once and given
-to the LLM once. What differs per job is the *verdict*, and that is a row in
+to the LLM once. What differs per job is the _verdict_, and that is a row in
 `listing_verdicts` — so a flat inside one search's polygon and outside another's
 is accepted by the first and rejected by the second, without either one hiding
 or reviving the listing on the other's behalf.
@@ -53,20 +53,25 @@ rating.
 
 Filtering is deliberately uneven, because the stages differ in what they cost:
 
-| Stage | Filters on | Costs |
-| --- | --- | --- |
-| Card | Blacklist and specification, over what the card states | nothing |
-| Detail | Geography only | the page fetch, which extraction needs anyway |
-| Extraction | Structured LLM fields, plus one re-geocoded area check | one LLM call |
+| Stage      | Filters on                                                      | Costs        |
+| ---------- | --------------------------------------------------------------- | ------------ |
+| Card       | Blacklist and specification, over what the card states          | nothing      |
+| Extraction | Structured LLM fields, and geography from the canonical address | one LLM call |
 
 There is no text matching after extraction. The model already answers "is this a
 swap, a sublet, a WG room, furnished, fixed-term?" as validated enum fields, and
 grepping the page for the same thing asks twice and believes the worse answer.
 
-An advert refused before extraction never becomes a listing. It is recorded in
+An advert refused at the card stage never becomes a listing. It is recorded in
 `source_rejections` together with the claims that identify it, which is what
 stops it being fetched and refused again on the next capture whose page text
 differs.
+
+Geography is decided exactly once, after extraction, from the address the model
+read. The detail stage used to geocode a scraped address and refuse adverts
+outside every interested job's polygons, which meant guessing the location from
+the worst evidence available to save a page it had already fetched — and often
+guessing from a district centroid, one point standing for a whole neighbourhood.
 
 ## Data policy
 
@@ -149,95 +154,94 @@ exists, it is listed here.
 
 #### Credentials
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `GOOGLE_GEOCODING_API_KEY` | `(unset)` | Google Geocoding key. |
-| `OPENROUTER_API_KEY` | `(unset)` | OpenRouter key; required for LLM parsing. |
+| Variable                   | Default   | Purpose                                   |
+| -------------------------- | --------- | ----------------------------------------- |
+| `GOOGLE_GEOCODING_API_KEY` | `(unset)` | Google Geocoding key.                     |
+| `OPENROUTER_API_KEY`       | `(unset)` | OpenRouter key; required for LLM parsing. |
 
 #### Kill switches
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_DETAIL_FETCH_ENABLED` | `true` | Set 0 to stop draining detail work. |
-| `FREDY_LLM_ENABLED` | `true` | Set 0 to disable the LLM entirely (parsing stops). |
-| `FREDY_MAINTENANCE_ENABLED` | `true` | Set 0 to stop scheduled maintenance work items. |
-| `FREDY_NOTIFICATION_ENABLED` | `true` | Set 0 to stop notification delivery. |
-| `FREDY_PARSER_ENABLED` | `true` | Set 0 to stop the LLM parser worker. |
-| `FREDY_RATING_ENABLED` | `true` | Set 0 to stop market rating. |
+| Variable                     | Default | Purpose                                            |
+| ---------------------------- | ------- | -------------------------------------------------- |
+| `FREDY_DETAIL_FETCH_ENABLED` | `true`  | Set 0 to stop draining detail work.                |
+| `FREDY_LLM_ENABLED`          | `true`  | Set 0 to disable the LLM entirely (parsing stops). |
+| `FREDY_MAINTENANCE_ENABLED`  | `true`  | Set 0 to stop scheduled maintenance work items.    |
+| `FREDY_NOTIFICATION_ENABLED` | `true`  | Set 0 to stop notification delivery.               |
+| `FREDY_PARSER_ENABLED`       | `true`  | Set 0 to stop the LLM parser worker.               |
+| `FREDY_RATING_ENABLED`       | `true`  | Set 0 to stop market rating.                       |
 
 #### Discovery and the work queue
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_DETAIL_ITEM_TIMEOUT_MS` | `300000` | Deadline for one detail capture. |
-| `FREDY_DETAIL_MAX_FAILURES` | `8` | Attempts before a detail item is abandoned. |
-| `FREDY_DISCOVERY_MAX_PAGES` | `20` | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
-| `FREDY_DISCOVERY_TIMEOUT_MS` | `120000` | Deadline for one provider discovery run. |
-| `FREDY_PARSER_ITEM_TIMEOUT_MS` | `300000` | Deadline for one parse (text + repair). |
-| `FREDY_PARSER_MAX_ITEM_FAILURES` | `8` | Attempts before a parse item is abandoned. |
-| `FREDY_RATING_ITEM_TIMEOUT_MS` | `30000` | Deadline for one market rating. |
-| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS` | `1800000` | Deadline for automatic database upkeep. |
-| `FREDY_WORK_IDLE_POLL_MS` | `1000` | Idle sleep between empty work-queue polls. |
-| `FREDY_WORK_MAX_BACKOFF_MS` | `3600000` | Ceiling on retry backoff for work items. |
-| `FREDY_WORKER_RESTART_DELAY_MS` | `5000` | Delay before restarting a crashed worker loop. |
+| Variable                            | Default   | Purpose                                                                          |
+| ----------------------------------- | --------- | -------------------------------------------------------------------------------- |
+| `FREDY_DETAIL_ITEM_TIMEOUT_MS`      | `300000`  | Deadline for one detail capture.                                                 |
+| `FREDY_DETAIL_MAX_FAILURES`         | `8`       | Attempts before a detail item is abandoned.                                      |
+| `FREDY_DISCOVERY_MAX_PAGES`         | `20`      | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
+| `FREDY_DISCOVERY_TIMEOUT_MS`        | `120000`  | Deadline for one provider discovery run.                                         |
+| `FREDY_PARSER_ITEM_TIMEOUT_MS`      | `300000`  | Deadline for one parse (text + repair).                                          |
+| `FREDY_PARSER_MAX_ITEM_FAILURES`    | `8`       | Attempts before a parse item is abandoned.                                       |
+| `FREDY_RATING_ITEM_TIMEOUT_MS`      | `30000`   | Deadline for one market rating.                                                  |
+| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS` | `1800000` | Deadline for automatic database upkeep.                                          |
+| `FREDY_WORK_IDLE_POLL_MS`           | `1000`    | Idle sleep between empty work-queue polls.                                       |
+| `FREDY_WORK_MAX_BACKOFF_MS`         | `3600000` | Ceiling on retry backoff for work items.                                         |
+| `FREDY_WORKER_RESTART_DELAY_MS`     | `5000`    | Delay before restarting a crashed worker loop.                                   |
 
 #### LLM
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_LLM_DAILY_LIMIT` | `1000` | Daily LLM request budget (UTC days). |
-| `FREDY_LLM_MAX_EMBEDDED_CHARS` | `24000` | Cap on embedded JSON sent to the LLM. |
-| `FREDY_LLM_MAX_LISTING_FAILURES` | `5` | LLM attempts before a listing is abandoned. |
-| `FREDY_LLM_MAX_TEXT_CHARS` | `24000` | Cap on captured page text sent to the LLM. |
-| `FREDY_LLM_REQUEST_TIMEOUT_MS` | `120000` | Deadline for a single LLM request. |
-| `FREDY_LLM_TEXT_MODEL` | _unset_ | OpenRouter model id for text extraction. |
-| `FREDY_LLM_UPSTREAM_BACKOFF_MS` | `60000` | Backoff after an upstream LLM rate limit. |
-| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18` | Client-side OpenRouter rate limit. |
+| Variable                               | Default  | Purpose                                     |
+| -------------------------------------- | -------- | ------------------------------------------- |
+| `FREDY_LLM_DAILY_LIMIT`                | `1000`   | Daily LLM request budget (UTC days).        |
+| `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000`  | Cap on embedded JSON sent to the LLM.       |
+| `FREDY_LLM_MAX_LISTING_FAILURES`       | `5`      | LLM attempts before a listing is abandoned. |
+| `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`  | Cap on captured page text sent to the LLM.  |
+| `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `120000` | Deadline for a single LLM request.          |
+| `FREDY_LLM_TEXT_MODEL`                 | _unset_  | OpenRouter model id for text extraction.    |
+| `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`  | Backoff after an upstream LLM rate limit.   |
+| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`     | Client-side OpenRouter rate limit.          |
 
 #### Filters and geocoding
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS` | `14` | Age at which a coarse geocode retries. |
-| `FREDY_PRELLM_AREA_MIN_PRECISION` | `house,street` | Geocode precisions confident enough to reject a listing before the LLM. |
+| Variable                                 | Default | Purpose                                |
+| ---------------------------------------- | ------- | -------------------------------------- |
+| `FREDY_GEOCODER_RETRY_COARSE_AFTER_DAYS` | `14`    | Age at which a coarse geocode retries. |
 
 #### Provider circuit breaker
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_PROVIDER_BREAKER_COOLDOWN_MS` | `1800000` | Initial provider pause duration. |
-| `FREDY_PROVIDER_BREAKER_FAILURES` | `2` | Failures before a provider is paused. |
-| `FREDY_PROVIDER_BREAKER_MAX_COOLDOWN_MS` | `21600000` | Ceiling on provider pause. |
+| Variable                                 | Default    | Purpose                               |
+| ---------------------------------------- | ---------- | ------------------------------------- |
+| `FREDY_PROVIDER_BREAKER_COOLDOWN_MS`     | `1800000`  | Initial provider pause duration.      |
+| `FREDY_PROVIDER_BREAKER_FAILURES`        | `2`        | Failures before a provider is paused. |
+| `FREDY_PROVIDER_BREAKER_MAX_COOLDOWN_MS` | `21600000` | Ceiling on provider pause.            |
 
 #### Market model and metrics
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_MARKET_DB_PATH` | _unset_ | Override the market SQLite path (defaults to app db). |
-| `FREDY_MARKET_EXPORTER_PORT` | `9217` | Prometheus exporter port; 0 disables it. |
-| `FREDY_MARKET_INTERVAL_LEVEL` | `0.8` | Conformal interval coverage level. |
-| `FREDY_MARKET_MODEL_CRON` | `0 2 * * *` | Market training schedule; "0" disables training entirely. |
-| `FREDY_MARKET_MODEL_INTERVAL_SECONDS` | `86400` | Minimum seconds between retrains; 0 disables training. |
-| `FREDY_MARKET_MODEL_RUN_TIMEOUT_MS` | `1800000` | Deadline for one retrain run. |
-| `FREDY_MARKET_SURFACE_MIN_CONFIDENCE` | `0.25` | Minimum surface-cell confidence. |
-| `FREDY_PYTHON_BIN` | `python3` | Python used for the LightGBM trainer. |
+| Variable                              | Default     | Purpose                                                   |
+| ------------------------------------- | ----------- | --------------------------------------------------------- |
+| `FREDY_MARKET_DB_PATH`                | _unset_     | Override the market SQLite path (defaults to app db).     |
+| `FREDY_MARKET_EXPORTER_PORT`          | `9217`      | Prometheus exporter port; 0 disables it.                  |
+| `FREDY_MARKET_INTERVAL_LEVEL`         | `0.8`       | Conformal interval coverage level.                        |
+| `FREDY_MARKET_MODEL_CRON`             | `0 2 * * *` | Market training schedule; "0" disables training entirely. |
+| `FREDY_MARKET_MODEL_INTERVAL_SECONDS` | `86400`     | Minimum seconds between retrains; 0 disables training.    |
+| `FREDY_MARKET_MODEL_RUN_TIMEOUT_MS`   | `1800000`   | Deadline for one retrain run.                             |
+| `FREDY_MARKET_SURFACE_MIN_CONFIDENCE` | `0.25`      | Minimum surface-cell confidence.                          |
+| `FREDY_PYTHON_BIN`                    | `python3`   | Python used for the LightGBM trainer.                     |
 
 #### Maintenance
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FREDY_DB_VACUUM` | `false` | Set 1 to VACUUM during scheduled maintenance. |
-| `FREDY_MAINTENANCE_INTERVAL_MS` | `86400000` | Spacing between maintenance work items. |
+| Variable                        | Default    | Purpose                                       |
+| ------------------------------- | ---------- | --------------------------------------------- |
+| `FREDY_DB_VACUUM`               | `false`    | Set 1 to VACUUM during scheduled maintenance. |
+| `FREDY_MAINTENANCE_INTERVAL_MS` | `86400000` | Spacing between maintenance work items.       |
 
 #### Runtime and tooling
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `CLOAKBROWSER_BINARY_PATH` | _unset_ | Explicit CloakBrowser Chromium path. |
-| `CLOAKBROWSER_CACHE_DIR` | _unset_ | CloakBrowser download cache directory. |
-| `FREDY_DOCKER` | `false` | Set by the container image to signal a Docker deployment. |
-| `MIGRATION_ALLOW_CHECKSUM_UPDATE` | `false` | Permit rewriting the recorded checksum of an applied migration. |
-| `NODE_ENV` | `development` | Node environment; "production" quiets debug logging. |
+| Variable                          | Default       | Purpose                                                         |
+| --------------------------------- | ------------- | --------------------------------------------------------------- |
+| `CLOAKBROWSER_BINARY_PATH`        | _unset_       | Explicit CloakBrowser Chromium path.                            |
+| `CLOAKBROWSER_CACHE_DIR`          | _unset_       | CloakBrowser download cache directory.                          |
+| `FREDY_DOCKER`                    | `false`       | Set by the container image to signal a Docker deployment.       |
+| `MIGRATION_ALLOW_CHECKSUM_UPDATE` | `false`       | Permit rewriting the recorded checksum of an applied migration. |
+| `NODE_ENV`                        | `development` | Node environment; "production" quiets debug logging.            |
 
 ## Local development
 

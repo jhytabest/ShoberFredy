@@ -104,10 +104,10 @@ const startedWorkers = [
   startParserWorker(),
   startRatingWorker(),
   startMaintenanceWorker(),
+  startNotificationDispatcher(),
   marketModelWorker,
 ];
 expectWorkers(startedWorkers.filter(Boolean));
-startNotificationDispatcher();
 
 // Initialize the scrape/capture producer (schedules and bus listeners).
 initJobExecutionService({ providers, settings, intervalMs: INTERVAL });

@@ -11,16 +11,16 @@
 # so feature parity between training and scoring is structural.
 #
 # Input (JSON file, path via --input):
-#   featureNames: [str], X: [[float|null]], y: [float], ageDays: [float],
+#   featureNames: [str], X: [[float|null]], y: [float],
 #   paramsFold: [int], calibFold: [int],
 #   quantiles: {lo, mid, hi}, seed: int
 # Output (JSON file, path via --output):
-#   ok, params (chosen grid point incl. half_life_days), bestIterations,
+#   ok, params (chosen grid point), bestIterations,
 #   boosters (dump_model JSON per quantile), oof (per-row out-of-fold
 #   loLog/midLog/hiLog aligned with the input rows), featureImportance
 #
 # Selection protocol mirrors the ridge model: the hyper-parameter grid
-# (num_leaves x min_data_in_leaf x recency half-life) is scored by pinball
+# (num_leaves x min_data_in_leaf) is scored by pinball
 # loss on the 'paramsFold' spatially-blocked folds; out-of-fold predictions
 # for conformal calibration come from the independently salted 'calibFold'
 # folds with the chosen, then FROZEN, parameters and iteration counts, so
@@ -31,7 +31,6 @@
 
 import argparse
 import json
-import math
 import sys
 
 import numpy as np
@@ -42,8 +41,6 @@ MAX_ROUNDS = 800
 EARLY_STOPPING_ROUNDS = 50
 NUM_LEAVES_GRID = [7, 15, 31]
 MIN_DATA_IN_LEAF_GRID = [10, 25, 50]
-HALF_LIFE_GRID_DAYS = [45, 90, 180, 365]
-MIN_WEIGHT = 0.05
 
 
 def base_params(alpha, seed):
@@ -61,12 +58,6 @@ def base_params(alpha, seed):
     }
 
 
-def recency_weights(age_days, half_life):
-    if not half_life or half_life <= 0:
-        return np.ones_like(age_days)
-    return np.maximum(MIN_WEIGHT, np.exp(-math.log(2) * (age_days / half_life)))
-
-
 def fold_splits(fold_ids):
     splits = []
     for fold in sorted(set(fold_ids)):
@@ -82,7 +73,7 @@ def pinball(y_true, y_pred, alpha):
     return float(np.mean(np.maximum(alpha * diff, (alpha - 1) * diff)))
 
 
-def cv_best_iteration(X, y, weights, splits, params, feature_names, max_rounds):
+def cv_best_iteration(X, y, splits, params, feature_names, max_rounds):
     """Manual CV with early stopping on the pooled fold loss; returns
     (best_iteration, best_pooled_pinball)."""
     boosters = []
@@ -90,7 +81,6 @@ def cv_best_iteration(X, y, weights, splits, params, feature_names, max_rounds):
         ds = lgb.Dataset(
             X[train_idx],
             label=y[train_idx],
-            weight=weights[train_idx],
             feature_name=feature_names,
             params={"verbose": -1},
         )
@@ -112,13 +102,12 @@ def cv_best_iteration(X, y, weights, splits, params, feature_names, max_rounds):
     return best_iter, best_loss
 
 
-def oof_predictions(X, y, weights, splits, params, num_rounds, feature_names):
+def oof_predictions(X, y, splits, params, num_rounds, feature_names):
     preds = np.full(len(y), np.nan)
     for train_idx, test_idx in splits:
         ds = lgb.Dataset(
             X[train_idx],
             label=y[train_idx],
-            weight=weights[train_idx],
             feature_name=feature_names,
             params={"verbose": -1},
         )
@@ -142,7 +131,6 @@ def main():
         dtype=np.float64,
     )
     y = np.array(payload["y"], dtype=np.float64)
-    age_days = np.array(payload["ageDays"], dtype=np.float64)
     params_fold = np.array(payload["paramsFold"], dtype=np.int64)
     calib_fold = np.array(payload["calibFold"], dtype=np.int64)
     quantiles = payload["quantiles"]
@@ -154,28 +142,25 @@ def main():
         raise ValueError("not enough rows per fold to cross-validate")
 
     # 1. Grid search on the median model.
+    # Every observation counts the same, so there are no weights to pass.
     best = None
-    for half_life in HALF_LIFE_GRID_DAYS:
-        weights = recency_weights(age_days, half_life)
-        for num_leaves in NUM_LEAVES_GRID:
-            for min_data in MIN_DATA_IN_LEAF_GRID:
-                params = dict(
-                    base_params(quantiles["mid"], seed),
-                    num_leaves=num_leaves,
-                    min_data_in_leaf=min_data,
-                )
-                iteration, loss = cv_best_iteration(
-                    X, y, weights, params_splits, params, feature_names, MAX_ROUNDS
-                )
-                if best is None or loss < best["loss"] - 1e-9:
-                    best = {
-                        "loss": loss,
-                        "num_leaves": num_leaves,
-                        "min_data_in_leaf": min_data,
-                        "half_life_days": half_life,
-                        "mid_iterations": iteration,
-                    }
-    weights = recency_weights(age_days, best["half_life_days"])
+    for num_leaves in NUM_LEAVES_GRID:
+        for min_data in MIN_DATA_IN_LEAF_GRID:
+            params = dict(
+                base_params(quantiles["mid"], seed),
+                num_leaves=num_leaves,
+                min_data_in_leaf=min_data,
+            )
+            iteration, loss = cv_best_iteration(
+                X, y, params_splits, params, feature_names, MAX_ROUNDS
+            )
+            if best is None or loss < best["loss"] - 1e-9:
+                best = {
+                    "loss": loss,
+                    "num_leaves": num_leaves,
+                    "min_data_in_leaf": min_data,
+                    "mid_iterations": iteration,
+                }
 
     # 2. Freeze structure params; pick each quantile's iteration count.
     best_iterations = {}
@@ -189,7 +174,7 @@ def main():
             best_iterations[name] = best["mid_iterations"]
         else:
             best_iterations[name], _ = cv_best_iteration(
-                X, y, weights, params_splits, params, feature_names, MAX_ROUNDS
+                X, y, params_splits, params, feature_names, MAX_ROUNDS
             )
 
     # 3. Out-of-fold predictions on the calibration folds (frozen params).
@@ -202,7 +187,7 @@ def main():
         )
         oof[name + "Log"] = [
             None if np.isnan(v) else float(v)
-            for v in oof_predictions(X, y, weights, calib_splits, params, best_iterations[name], feature_names)
+            for v in oof_predictions(X, y, calib_splits, params, best_iterations[name], feature_names)
         ]
 
     # 4. Final models on all rows.
@@ -214,7 +199,7 @@ def main():
             num_leaves=best["num_leaves"],
             min_data_in_leaf=best["min_data_in_leaf"],
         )
-        ds = lgb.Dataset(X, label=y, weight=weights, feature_name=feature_names, params={"verbose": -1})
+        ds = lgb.Dataset(X, label=y, feature_name=feature_names, params={"verbose": -1})
         booster = lgb.train(params, ds, num_boost_round=best_iterations[name])
         boosters[name] = booster.dump_model()
         if name == "mid":
@@ -227,7 +212,6 @@ def main():
         "params": {
             "num_leaves": best["num_leaves"],
             "min_data_in_leaf": best["min_data_in_leaf"],
-            "half_life_days": best["half_life_days"],
             "learning_rate": LEARNING_RATE,
             "cv_pinball_mid": best["loss"],
         },

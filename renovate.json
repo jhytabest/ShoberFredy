@@ -1,10 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "constraintsFiltering": "strict",
   "constraints": {
     "python": "3.11"
   },
   "packageRules": [
+    {
+      "description": "The engines block is a floor we choose, not a version we track. Renovate proposed \">=24.19.0\" over \">=24.0.0\" within minutes; the runner resolves node-version: 24 to whatever patch it has, so a patch-level floor fails yarn at \"Validating package.json\" before it fetches anything. What we actually run is tracked where it is real: the Dockerfile digest and .nvmrc.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["engines"],
+      "enabled": false
+    },
     {
       "matchManagers": ["npm"],
       "rangeStrategy": "bump"

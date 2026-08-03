@@ -49,7 +49,7 @@
     "npm": ">=7.24.2"
   },
   "dependencies": {
-    "@turf/boolean-point-in-polygon": "^7.3.5",
+    "@turf/boolean-point-in-polygon": "^7.4.0",
     "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
     "cloakbrowser": "0.5.3",

@@ -1,6 +1,15 @@
 name: Build and publish Docker image
 
-# Builds ghcr.io/jhytabest/shoberfredy on every master push (and tags).
+# Builds ghcr.io/jhytabest/shoberfredy on every pull request and every master
+# push (and tags). Only master pushes and tags publish.
+#
+# The build runs on pull requests because it is the only check that can fail for
+# a reason lint cannot see, and because Renovate automerges on a green check set.
+# When this ran on master alone, `numpy==2.5.1` sailed through review and merged:
+# it needs Python 3.12 and the base image ships 3.11, so master's image stopped
+# building, no new digest was published, and the homeserver — which pins a digest
+# — simply stopped receiving updates with nothing failing in front of anyone.
+#
 # Deployment to the homeserver stays in the homeserver repo, where Renovate
 # advances the published master digest through the normal release path.
 #
@@ -8,6 +17,9 @@ name: Build and publish Docker image
 # is lockfile-pinned too and updated by Renovate, so every image is reproducible.
 
 on:
+  pull_request:
+    branches:
+      - 'master'
   push:
     branches:
       - 'master'
@@ -61,7 +73,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
+      # Only the publishing runs need the registry. A pull request builds and
+      # smoke-tests the image and never pushes it.
       - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -75,6 +90,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=tag
+            type=ref,event=pr
             type=raw,value=master,enable=${{ github.ref == 'refs/heads/master' }}
 
       # Homeserver is a single amd64 box; skipping arm64 halves build time.
@@ -124,6 +140,7 @@ jobs:
           docker exec "$container" curl -fsS --max-time 10 http://localhost:9998/health
 
       - name: Publish Docker image
+        if: github.event_name != 'pull_request'
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |

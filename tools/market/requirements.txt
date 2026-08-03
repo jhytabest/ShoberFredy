@@ -1,2 +1,7 @@
-numpy==2.5.1
+# The image is node:24-slim, which is Debian 12 and ships Python 3.11, so
+# 2.4.x is the newest numpy that installs here at all: 2.5 declares
+# Requires-Python >=3.12 and pip refuses it. Renovate is told the same thing
+# in renovate.json (constraints.python), so it proposes 2.4.x updates and
+# stops offering a 2.5 that cannot build.
+numpy==2.4.6
 lightgbm==4.7.0

@@ -3008,6 +3008,114 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 73,
+      "type": "row",
+      "title": "Card filter audit (analysis only — never changes a verdict)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 108,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 74,
+      "type": "barchart",
+      "title": "Sampled card refusals graded by extraction, per reason",
+      "description": "A few percent of card-stage refusals are extracted anyway and graded against the post-extraction rule for the same thing. The sampled advert is refused regardless, so nothing here reflects a listing that was let through. Read the card_wrong share: a reason with a high one is refusing flats on evidence too thin to refuse them. Cumulative since the audit ledger began — a term that fires twice a week needs months to mean anything.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 109,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason, verdict) (fredy_card_filter_audit_total)",
+          "legendFormat": "{{reason}} / {{verdict}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "stacking": "normal",
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 75,
+      "type": "timeseries",
+      "title": "Share of sampled refusals the extraction disagreed with",
+      "description": "card_wrong as a fraction of all graded samples, per reason. This is the false-positive rate of each card term, and it is the only number that can answer whether a term like the bare token WG is over-refusing. It is a measurement, not a control: the pipeline refuses the sampled advert either way.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 109,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (fredy_card_filter_audit_total{verdict=\"card_wrong\"})\n  / sum by (reason) (fredy_card_filter_audit_total)",
+          "legendFormat": "{{reason}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ],
   "templating": {

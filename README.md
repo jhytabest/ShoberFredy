@@ -198,6 +198,7 @@ exists, it is listed here.
 | `FREDY_WORK_MAX_PARK_MS`             | `86400000` | Age at which parked work is abandoned regardless of park count.                  |
 | `FREDY_RATE_MAX_FAILURES`            | `5`        | Attempts before a rating item is abandoned.                                      |
 | `FREDY_MAINTENANCE_MAX_FAILURES`     | `3`        | Attempts before a maintenance item is abandoned.                                 |
+| `FREDY_LIVENESS_MAX_FAILURES`        | `3`        | Attempts before a liveness probe is abandoned.                                   |
 | `FREDY_MARKET_MODEL_MAX_FAILURES`    | `3`        | Attempts before a training item is abandoned.                                    |
 | `FREDY_NOTIFY_MAX_FAILURES`          | `6`        | Attempts before a notification is abandoned.                                     |
 | `FREDY_WORKER_RESTART_DELAY_MS`      | `5000`     | Delay before restarting a crashed worker loop.                                   |

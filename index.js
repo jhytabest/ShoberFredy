@@ -16,6 +16,7 @@ import { startMetricsExporterProcess } from './lib/services/market/metricsExport
 import { startMarketModelScheduler } from './lib/services/market/marketModelScheduler.js';
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
+import { startLivenessWorker } from './lib/services/pipeline/livenessWorker.js';
 import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
 import { startMaintenanceWorker } from './lib/services/pipeline/maintenanceWorker.js';
@@ -104,6 +105,7 @@ const startedWorkers = [
   startParserWorker(),
   startRatingWorker(),
   startMaintenanceWorker(),
+  startLivenessWorker({ providers }),
   startNotificationDispatcher(),
   marketModelWorker,
 ];

@@ -1,2 +1,2 @@
-numpy==2.4.6
+numpy==2.5.1
 lightgbm==4.7.0

@@ -3,5 +3,5 @@
 # Requires-Python >=3.12 and pip refuses it. Renovate is told the same thing
 # in renovate.json (constraints.python), so it proposes 2.4.x updates and
 # stops offering a 2.5 that cannot build.
-numpy==2.4.6
+numpy==2.5.1
 lightgbm==4.7.0

@@ -38,9 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # From .nvmrc, not a bare major. `node-version: 24` resolved to whatever
+      # patch setup-node's manifest happened to carry (24.18.0), so an engines
+      # floor of >=24.19.0 failed yarn at "Validating package.json" before it
+      # fetched anything. One file now decides what CI installs, what the image
+      # ships and what the floor demands, so Renovate can move all three together.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version-file: '.nvmrc'
           cache: 'yarn'
 
       - run: yarn install --frozen-lockfile

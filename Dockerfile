@@ -1,4 +1,4 @@
-FROM node:24-slim@sha256:cd84903a12dbd26b46f1f3b8144a2568c41c5d37ddd0c7a80a34c7a19786b35f
+FROM node:24-trixie-slim@sha256:85498d7fd8e2bc0b02abb1792ef27341559836236dd0b1af160fa66bb85148df
 
 LABEL io.homeserver.monitoring.service="fredy" \
       io.homeserver.monitoring.metrics-port="9217" \
@@ -17,6 +17,9 @@ LABEL io.homeserver.monitoring.service="fredy" \
 # (tools/market/train_gbm.py) runs as a short-lived nightly batch process.
 # libgomp1 is LightGBM's OpenMP runtime; python3-venv isolates the pinned
 # trainer deps from Debian's PEP 668-managed system Python.
+# Debian 13 (trixie), not 12: bookworm ships Python 3.11 and numpy dropped it
+# after 2.4, so the trainer's pins could only ever go backwards. Trixie ships
+# 3.13, which is why renovate.json no longer has to declare an interpreter.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates fonts-liberation libasound2 \
     libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \

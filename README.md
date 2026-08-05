@@ -6,8 +6,16 @@ Kleinanzeigen, and WG-Gesucht, extracts structured facts with an LLM,
 deduplicates across portals, prices each listing against two local market
 models, and sends accepted listings to Telegram.
 
-It is based on [Fredy](https://github.com/orangecoding/fredy). See
-[LICENSE](LICENSE) for licensing and attribution.
+It began as a fork of [Fredy](https://github.com/orangecoding/fredy) by
+Christian Kellner (orangecoding) and keeps his copyright notice at the head of
+every source file. The two have since diverged completely — the pipeline,
+schema, market models, monitoring and deployment here are not upstream's — so
+this repository is developed and released on its own. See [LICENSE](LICENSE) for
+the terms, which include an attribution clause; the notices are required, not
+decorative.
+
+This README is the only document in the repository. Anything that needed saying
+beside the code is said here instead.
 
 ## Architecture
 
@@ -68,10 +76,10 @@ stops it being fetched and refused again on the next capture whose page text
 differs.
 
 Geography is decided exactly once, after extraction, from the address the model
-read. The detail stage used to geocode a scraped address and refuse adverts
-outside every interested job's polygons, which meant guessing the location from
-the worst evidence available to save a page it had already fetched — and often
-guessing from a district centroid, one point standing for a whole neighbourhood.
+read. Roughly a third of geocodes resolve only to a district or postcode
+centroid, so a polygon decision is accurate to a neighbourhood rather than a
+building. That is accepted deliberately: the alternative is guessing from the
+scraped card, which is worse evidence for the same answer.
 
 ## Data policy
 
@@ -286,8 +294,37 @@ yarn format:check
 yarn lint
 ```
 
-CI runs both checks, builds the Docker image, starts it through the real
-migration path, and requires a healthy `/health` response before publishing.
+The Grafana dashboard in `monitoring/grafana-dashboard.json` is generated, not
+edited. `monitoring/dashboards/build` produces it from the Grafana Foundation
+SDK, and `theme.py` beside it holds the shared panel styling:
+
+```bash
+yarn dashboard:setup
+yarn dashboard:build
+```
+
+`theme.py` is duplicated in the homeserver repository on purpose. The two
+repositories release independently and neither may depend on the other, and
+publishing a package for seventy lines serving two dashboards would cost more
+than the duplication does.
+
+The SDK version is pinned and Renovate is constrained to the 11.6 line. Its
+version strings are `<build-epoch>!<grafana-minor>`, and within one publishing
+wave the epoch rises as the minor falls, so an unconstrained bump silently moves
+the generator onto an older schema.
+
+CI runs both checks, verifies the committed dashboard still matches its
+generator, builds the Docker image, starts it through the real migration path,
+and requires a healthy `/health` response before publishing.
+
+There is no test suite, and none should be added unless it is asked for.
+Verification here means running the real path against a production snapshot —
+see the Docker mirror below.
+
+Source files carry no comments beyond the licence header. Two exceptions are
+kept because they are directives rather than prose: `eslint-disable` markers,
+and a comment that is the entire body of an otherwise-empty block, which
+`no-empty` requires.
 
 ## Production-state Docker mirror
 

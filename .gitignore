@@ -14,3 +14,4 @@ geocoder.env
 .live-mirror/
 __pycache__/
 .market-venv/
+.dashboard-venv/

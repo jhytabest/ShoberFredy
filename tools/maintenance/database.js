@@ -3,11 +3,6 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-/**
- * Read-only database health report. Mutating upkeep is a scheduled durable work
- * item in the application pipeline.
- */
-
 import SqliteConnection from '../../lib/services/storage/SqliteConnection.js';
 import { getMigrationStatus } from '../../lib/services/storage/migrations/migrate.js';
 import { buildDatabaseMaintenanceReport } from '../../lib/services/maintenance/databaseReport.js';

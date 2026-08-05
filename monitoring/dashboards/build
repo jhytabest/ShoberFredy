@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import theme
+from grafana_foundation_sdk.builders import dashboard as dashboard_builder
+from grafana_foundation_sdk.models.dashboard import DynamicConfigValue
+
+UID = "fredy-market"
+OUTPUT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "grafana-dashboard.json",
+)
+
+MODEL = '{model="$model"}'
+
+PARTITION = [
+    {"id": "convertFieldType", "options": {"conversions": [{"destinationType": "time", "targetField": "date"}]}},
+    {
+        "id": "organize",
+        "options": {
+            "excludeByName": {"Time": True, "__name__": True, "job": True, "instance": True, "app": True},
+            "indexByName": {},
+            "renameByName": {},
+        },
+    },
+]
+
+
+def partition_by(field):
+    return PARTITION + [{"id": "partitionByValues", "options": {"fields": [field], "keepFields": False}}]
+
+
+def build():
+    return (
+        theme.page("Fredy Market", UID, ["fredy", "market"], refresh="1m", from_val="now-7d")
+        .with_variable(dashboard_builder.CustomVariable("model").values("gbm,ridge").label("Model"))
+        # ---------------------------------------------------------------- pipeline
+        .with_row(dashboard_builder.Row("Pipeline"))
+        .with_panel(
+            theme.ranking()
+            .title("Discovery funnel")
+            .description(
+                "Cumulative totals. Everything shed at the card stage is free; everything refused after "
+                "extraction has already cost an LLM call."
+            )
+            .span(8)
+            .unit("short")
+            .thresholds(theme.flat("blue"))
+            .targets(
+                [
+                    theme.query('fredy_pipeline_funnel{stage="sources"}', "Sources discovered", True, "A"),
+                    theme.query('fredy_pipeline_funnel{stage="card_rejected"}', "Shed at card stage", True, "B"),
+                    theme.query('fredy_pipeline_funnel{stage="listings"}', "Listings", True, "C"),
+                    theme.query('fredy_pipeline_funnel{stage="llm_extracted"}', "LLM extractions", True, "D"),
+                    theme.query('fredy_pipeline_funnel{stage="accepted"}', "Accepted", True, "E"),
+                ]
+            )
+        )
+        .with_panel(
+            theme.ranking()
+            .title("Refusals by reason")
+            .description("Across both source refusals and listing verdicts. 'area' and 'intent' dominate.")
+            .span(8)
+            .unit("short")
+            .thresholds(theme.flat("purple"))
+            .targets([theme.query("sort_desc(sum by (reason) (fredy_rejections))", "{{reason}}", True)])
+        )
+        .with_panel(
+            theme.ranking()
+            .title("Refusals by term")
+            .description(
+                "Which configured blacklist term, intent rule or specification field actually fired. This is "
+                "how an over-broad term becomes visible instead of hiding inside one total."
+            )
+            .span(8)
+            .unit("short")
+            .thresholds(theme.flat("orange"))
+            .no_value("no term-level refusals recorded yet")
+            .targets(
+                [
+                    theme.query(
+                        "sort_desc(topk(12, sum by (reason_term) (fredy_rejections_by_term)))",
+                        "{{reason_term}}",
+                        True,
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.trend()
+            .title("Card filter over-refusal rate")
+            .description(
+                "Of the card refusals that were sampled and then extracted anyway, the share the extraction "
+                "disagreed with. A term refusing flats nobody asked it to shows up here."
+            )
+            .span(12)
+            .unit("percentunit")
+            .min(0)
+            .max(1)
+            .no_value("no card refusal has been contradicted by extraction")
+            .targets(
+                [
+                    theme.query(
+                        'sum by (reason) (fredy_card_filter_audit_total{verdict="card_wrong"})'
+                        " / sum by (reason) (fredy_card_filter_audit_total)",
+                        "{{reason}}",
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.trend()
+            .title("LLM failures by outcome")
+            .description("Successes are excluded on purpose; their volume would flatten everything else.")
+            .span(12)
+            .unit("short")
+            .targets(
+                [theme.query('sum by (outcome) (fredy_llm_calls{outcome!="success"})', "{{outcome}}")]
+            )
+        )
+        .with_panel(
+            theme.trend()
+            .title("New listings by provider")
+            .description("Daily intake per portal. A provider going quiet is visible here first.")
+            .span(24)
+            .unit("short")
+            .targets([theme.query("fredy_market_daily_listings_by_provider", instant=True, fmt="table")])
+            .transformations(partition_by("provider"))
+        )
+        # ------------------------------------------------------------ market model
+        .with_row(dashboard_builder.Row("Market model"))
+        .with_panel(
+            theme.metric_tile()
+            .title("Median error")
+            .description("Out-of-fold MdAPE. Above 18% the model is not decision-grade.")
+            .span(4)
+            .height(5)
+            .unit("percent")
+            .decimals(1)
+            .thresholds(theme.bad_above(18, 25))
+            .targets([theme.query(f'fredy_market_model_error_percent{{model="$model",method="cv",stat="mdape"}}', instant=True)])
+        )
+        .with_panel(
+            theme.metric_tile()
+            .title("Skill vs naive")
+            .description("How much better than predicting the global median EUR/m2. The number that says whether the model earns its keep.")
+            .span(4)
+            .height(5)
+            .unit("percent")
+            .decimals(0)
+            .thresholds(theme.good_above(20, 35))
+            .targets(
+                [
+                    theme.query(
+                        '100 * (1 - fredy_market_model_error_percent{model="$model",method="cv",stat="mdape"}'
+                        ' / on (model) fredy_market_model_error_percent{model="$model",method="naive",stat="mdape"})',
+                        instant=True,
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.metric_tile()
+            .title("Within 10%")
+            .description("Share of out-of-fold predictions inside 10% of the actual ask.")
+            .span(4)
+            .height(5)
+            .unit("percent")
+            .decimals(0)
+            .thresholds(theme.good_above(30, 45))
+            .targets([theme.query('fredy_market_model_error_percent{model="$model",method="cv",stat="ppe10"}', instant=True)])
+        )
+        .with_panel(
+            theme.metric_tile()
+            .title("Interval width")
+            .description("Median width of the 80% interval as a share of the prediction. Near 100% means a fair-price range of roughly plus or minus half, which cannot support a decision.")
+            .span(4)
+            .height(5)
+            .unit("percent")
+            .decimals(0)
+            .thresholds(theme.bad_above(60, 90))
+            .targets([theme.query('fredy_market_model_interval{model="$model",stat="width_percent"}', instant=True)])
+        )
+        .with_panel(
+            theme.metric_tile()
+            .title("Coverage error")
+            .description("Signed distance from the conformal target. Green only when the interval is honest.")
+            .span(4)
+            .height(5)
+            .unit("percent")
+            .decimals(1)
+            .thresholds(theme.symmetric(3, 8))
+            .targets(
+                [
+                    theme.query(
+                        '100 * (fredy_market_model_interval{model="$model",stat="coverage"}'
+                        ' - ignoring(stat) fredy_market_model_interval{model="$model",stat="level"})',
+                        instant=True,
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.metric_tile()
+            .title("Model age")
+            .description("Time since the artifact was trained. Red past 30h means a retrain has been failing.")
+            .span(4)
+            .height(5)
+            .unit("s")
+            .thresholds(theme.bad_above(97200, 108000))
+            .targets(
+                [
+                    theme.query(
+                        'time() - fredy_market_prediction_model_created_timestamp_seconds{model="$model"}',
+                        instant=True,
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.trend()
+            .title("Error over time")
+            .description("Out-of-fold error against the naive baseline, per retrain.")
+            .span(12)
+            .unit("percent")
+            .targets([theme.query('fredy_market_model_error_percent{model="$model",stat="mdape"}', "{{method}}")])
+        )
+        .with_panel(
+            theme.ranking()
+            .title("Mispricing distribution")
+            .description("How far asks sit from the model's fair price. A wide spread here is the model's uncertainty, not a market signal.")
+            .span(12)
+            .unit("short")
+            .thresholds(theme.flat("green"))
+            .targets([theme.query('fredy_market_delta_distribution{model="$model"}', "{{bucket}}", True)])
+        )
+        # --------------------------------------------------------------- listings
+        .with_row(dashboard_builder.Row("Listings"))
+        .with_panel(
+            theme.plain_tile()
+            .title("Inventory")
+            .description("What is on the market now, what arrived recently, and how much of the corpus is unusable.")
+            .span(24)
+            .unit("short")
+            .thresholds(theme.flat())
+            .targets(
+                [
+                    theme.query('fredy_market_cleaned_listings{scope="active_visible"}', "Active on market", True, "A"),
+                    theme.query('fredy_market_new_listings{window="1d"}', "New 24h", True, "B"),
+                    theme.query('fredy_market_new_listings{window="7d"}', "New 7d", True, "C"),
+                    theme.query('fredy_market_price_cuts{window="7d"}', "Price cuts 7d", True, "D"),
+                    theme.query('fredy_market_cleaned_listings{scope="all_training"}', "Trainable", True, "E"),
+                ]
+            )
+        )
+        .with_panel(
+            theme.sheet()
+            .title("Best priced now")
+            .description("Ranked by distance below the model's fair price. Titles link to the advert.")
+            .span(24)
+            .height(10)
+            .targets([theme.query('fredy_market_top_listing{model="$model",window="7d"}', instant=True, fmt="table")])
+            .transformations(
+                [
+                    {
+                        "id": "organize",
+                        "options": {
+                            "excludeByName": {
+                                "Time": True,
+                                "__name__": True,
+                                "job": True,
+                                "instance": True,
+                                "app": True,
+                                "window": True,
+                                "listing_id": True,
+                                "model": True,
+                                "z_score": True,
+                            },
+                            "indexByName": {
+                                "rank": 0,
+                                "title": 1,
+                                "area": 2,
+                                "rooms": 3,
+                                "size_sqm": 4,
+                                "price_eur": 5,
+                                "price_per_sqm": 6,
+                                "fair_per_sqm": 7,
+                                "saving_eur_per_month": 8,
+                                "Value": 9,
+                                "provider": 10,
+                                "first_seen": 11,
+                                "confidence": 12,
+                                "link": 13,
+                            },
+                            "renameByName": {
+                                "Value": "delta %",
+                                "price_eur": "rent EUR",
+                                "size_sqm": "m2",
+                                "price_per_sqm": "EUR/m2",
+                                "fair_per_sqm": "fair EUR/m2",
+                                "saving_eur_per_month": "save EUR/mo",
+                                "first_seen": "first seen",
+                                "confidence": "conf",
+                            },
+                        },
+                    },
+                    {"id": "sortBy", "options": {"sort": [{"field": "rank"}]}},
+                ]
+            )
+            .override_by_name(
+                "title",
+                [
+                    DynamicConfigValue(
+                        id_val="links",
+                        value=[{"title": "Open advert", "url": "${__data.fields.link}", "targetBlank": True}],
+                    )
+                ],
+            )
+            .override_by_name("link", [DynamicConfigValue(id_val="custom.hidden", value=True)])
+            .override_by_name(
+                "delta %",
+                [DynamicConfigValue(id_val="unit", value="percent"), DynamicConfigValue(id_val="decimals", value=1)],
+            )
+            .override_by_name("save EUR/mo", [DynamicConfigValue(id_val="unit", value="currencyEUR")])
+        )
+        .with_panel(
+            theme.trend()
+            .title("Daily EUR per m2")
+            .description("Quartiles of the asking price per square metre across the whole corpus.")
+            .span(24)
+            .unit("currencyEUR")
+            .decimals(1)
+            .targets([theme.query("fredy_market_daily_price_per_sqm", instant=True, fmt="table")])
+            .transformations(partition_by("quantile"))
+        )
+    )
+
+
+theme.main(build, UID, OUTPUT)

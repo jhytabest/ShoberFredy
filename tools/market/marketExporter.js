@@ -3,15 +3,6 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-/*
- * CLI wrapper around lib/services/market/metricsExporter.js for running the
- * Prometheus exporter as its own process. The single-container deployment
- * starts it in-process from index.js instead.
- *
- * Usage: node tools/market/marketExporter.js
- * Env: FREDY_MARKET_DB_PATH, FREDY_MARKET_EXPORTER_PORT (default 9217)
- */
-
 import { startMetricsExporter, updateRuntimeHealthSnapshot } from '../../lib/services/market/metricsExporter.js';
 
 process.on('message', (message) => {

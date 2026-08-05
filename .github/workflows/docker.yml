@@ -56,8 +56,16 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+
       - name: Validate monitoring dashboard
-        run: jq empty monitoring/grafana-dashboard.json
+        run: |
+          python3 -m venv .dashboard-venv
+          .dashboard-venv/bin/pip install --disable-pip-version-check -r monitoring/dashboards/requirements.txt
+          .dashboard-venv/bin/python3 monitoring/dashboards/build --check
+          jq empty monitoring/grafana-dashboard.json
 
 
   build-and-push-image:

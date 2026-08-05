@@ -13,6 +13,9 @@
     "migratedb": "node lib/services/storage/migrations/migrate.js",
     "market:setup": "python3 -m venv .market-venv && .market-venv/bin/pip install --disable-pip-version-check -r tools/market/requirements.txt",
     "market:exporter": "node tools/market/marketExporter.js",
+    "dashboard:setup": "python3 -m venv .dashboard-venv && .dashboard-venv/bin/pip install --disable-pip-version-check -r monitoring/dashboards/requirements.txt",
+    "dashboard:build": ".dashboard-venv/bin/python3 monitoring/dashboards/build",
+    "dashboard:check": ".dashboard-venv/bin/python3 monitoring/dashboards/build --check",
     "maintenance": "node --env-file-if-exists=.env.local tools/maintenance/database.js",
     "copyright": "node ./copyright.js"
   },

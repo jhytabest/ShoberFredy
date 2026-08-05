@@ -27,16 +27,10 @@ if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
 }
 
-// Ensure the CloakBrowser stealth Chromium binary is present and complete before
-// jobs run.  ensureValidBinary() also detects and auto-heals partial extractions
-// (e.g. a newer version that was downloaded but only the chrome executable was
-// written) so Chrome never crashes with "Invalid file descriptor to ICU data".
 logger.info('Checking CloakBrowser binary...');
 await ensureValidBinary();
 logger.info('CloakBrowser binary ready.');
 
-// The config contains the SQLite directory. Create the default before opening
-// the database, while still refusing to replace an unreadable existing file.
 const isConfigAccessible = await checkIfConfigIsAccessible();
 if (!isConfigAccessible) {
   logger.error('Configuration exists, but is not accessible. Please check the file permission');
@@ -45,40 +39,24 @@ if (!isConfigAccessible) {
 await refreshConfig();
 await SqliteConnection.init();
 
-// Run DB migrations once at startup and block until finished
 await runMigrations();
 if (process.exitCode) {
   throw new Error('Database migrations failed; refusing to start against an incomplete schema.');
 }
-// Nothing is repaired here. Two startup passes used to run before the workers:
-// one reasserted terminal filters over active detail rows, one closed LLM audit
-// calls left open by the previous process. Both existed because crash recovery
-// was per-queue and ad hoc. Work items now carry a lease, so anything the dead
-// process was holding is reclaimed by whichever worker polls next, with the
-// interrupted attempt counted — and a repair pass that has nothing to repair is
-// just a slower start and one more thing to keep correct.
 
 const settings = await getSettings();
 
-// Ensure the sqlite directory exists before loading anything else (based on config.sqlitepath)
 const { dir: sqliteDir } = await computeDbPath();
 if (!fs.existsSync(sqliteDir)) {
   fs.mkdirSync(sqliteDir, { recursive: true });
 }
 
-// Load provider modules once at startup
 const providers = await getProviders();
 
-//assuming interval is always in minutes
 const INTERVAL = settings.interval * 60 * 1000;
 
-// The only HTTP surface: a liveness probe for the container and the deploy gate.
 await startHealthServer(settings.port || 9998);
 
-// Market services: the Prometheus exporter and CPU-heavy retraining run in
-// child processes so observability and model work cannot block the main loop.
-// The training cron only enqueues durable work; FREDY_MARKET_MODEL_CRON=0
-// disables that producer.
 try {
   await startMetricsExporterProcess();
 } catch (error) {
@@ -96,10 +74,6 @@ if (env('FREDY_MARKET_MODEL_CRON') !== '0') {
 
 logger.info('Started successfully. Listings are delivered over Telegram; there is no UI.');
 
-// Independent durable consumers start before the scrape producer. Neither is
-// awaited by scheduled scrape runs. Each returns its name when it actually
-// started, so the health endpoint can tell "disabled on purpose" apart from
-// "failed to start" instead of reporting an empty worker set as healthy.
 const startedWorkers = [
   startDetailFetchWorker({ providers }),
   startParserWorker(),
@@ -111,5 +85,4 @@ const startedWorkers = [
 ];
 expectWorkers(startedWorkers.filter(Boolean));
 
-// Initialize the scrape/capture producer (schedules and bus listeners).
 initJobExecutionService({ providers, settings, intervalMs: INTERVAL });

@@ -28,7 +28,6 @@ export default [
     },
   },
 
-  // Standalone CLIs and the maintenance toolkit report via stdout by design.
   {
     files: ['tools/**/*.js', 'copyright.js'],
     rules: {
@@ -36,8 +35,6 @@ export default [
     },
   },
 
-  // page.evaluate() bodies are serialised and run inside the headless browser,
-  // so they legitimately reference DOM globals that do not exist in Node.
   {
     files: ['lib/services/extractor/puppeteerExtractor.js'],
     languageOptions: {

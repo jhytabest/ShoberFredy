@@ -3,13 +3,6 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
-/*
- * Child-process entrypoint used by the durable market-model worker, plus
- * read-only status inspection.
- *
- * Usage: node tools/market/marketModel.js [run|status]
- */
-
 import { initMarketModel, runMarketModelOnce, getMarketModelStatus } from '../../lib/services/market/marketModel.js';
 
 await initMarketModel();

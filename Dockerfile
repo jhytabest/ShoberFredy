@@ -1,4 +1,4 @@
-FROM node:24-trixie-slim@sha256:85498d7fd8e2bc0b02abb1792ef27341559836236dd0b1af160fa66bb85148df
+FROM node:24-trixie-slim@sha256:b622a0bf896a85c5b13b7973eaf3f06e909cf539576551a67724323a21da2b17
 
 LABEL io.homeserver.monitoring.service="fredy" \
       io.homeserver.monitoring.metrics-port="9217" \

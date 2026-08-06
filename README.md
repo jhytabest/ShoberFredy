@@ -44,6 +44,14 @@ than running repair scripts.
 The market cron only produces a durable work item; it never performs training
 itself. Dedupe and filtering are pipeline stages, not maintenance commands.
 
+Retry budgets exist only where retry is the sole recovery path. Discovery has
+none — a failed run simply waits for the next interval. `rate`, `liveness`,
+`maintenance` and `market-model` get one attempt each, because a retrain, a
+maintenance pass or the next interval re-enqueues them anyway. `detail`, `parse`
+and `notify` keep real budgets: an unchanged card is only touched rather than
+reset, and a notification is keyed forever, so nothing else would bring them
+back.
+
 ### One advert, one extraction, one verdict per job
 
 Work is keyed by advert, not by (job, advert). Three searches that all find the
@@ -85,14 +93,12 @@ scraped card, which is worse evidence for the same answer.
 
 The SQLite schema has one current migration:
 `lib/services/storage/migrations/sql/100.current-schema.js`. It creates a clean
-database from scratch, and converts the one shape that preceded it — the release
-where a listing carried its own verdict — in place. That conversion moves
-never-extracted rejections out of `listings` into `source_rejections`,
-synthesises a per-job verdict for every surviving listing from what the old
-schema recorded, and merges rows that were separate only because two jobs found
-the same advert. Foreign keys are suspended while it runs, because a table whose
-shape must change has to be rebuilt, and referential integrity is asserted before
-it commits.
+database from scratch and is re-applied whenever its checksum changes, so it must
+stay idempotent — everything it does is `IF NOT EXISTS` or guarded by a shape
+check. Its `dropLegacySurface` step removes what this deployment no longer has:
+the `users` and session tables from when Fredy shipped a web UI, and the market
+surface-cell table the ridge field replaced. Foreign keys are suspended while it
+runs, because dropping a constrained column means rebuilding the table.
 
 - `listings` holds extractions only. A listing exists once the LLM has read the
   advert; what each job decided about it is a `listing_verdicts` row, and an
@@ -115,7 +121,7 @@ it commits.
   timing rather than duplicating raw pages, prompts, or responses.
 - Source URLs, filter decisions, processing attempts, merges, scores, and
   notification results remain auditable.
-- There is no historical backfill pipeline. Terminal work payloads are compacted
+- There is no backfill or repair pipeline. Terminal work payloads are compacted
   automatically after their durable result is attached.
 
 The upgrade preserves the existing database file. Set `FREDY_DB_VACUUM=1` to
@@ -141,9 +147,8 @@ The image runs as UID/GID `10001`; the supplied Compose file also uses a
 read-only root filesystem, drops Linux capabilities, and enables
 `no-new-privileges`.
 
-The database lives at `/db/listings.db`, content-addressed media at `/db/media`,
-and generated market layers at `/db/surface`. Back up the database and media
-directory together.
+The database lives at `/db/listings.db` and content-addressed media at
+`/db/media`. Back up the two together.
 
 ### Required secrets
 
@@ -201,13 +206,9 @@ exists, it is listed here.
 | `FREDY_RATING_ITEM_TIMEOUT_MS`       | `30000`    | Deadline for one market rating.                                                  |
 | `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS`  | `1800000`  | Deadline for automatic database upkeep.                                          |
 | `FREDY_WORK_IDLE_POLL_MS`            | `1000`     | Idle sleep between empty work-queue polls.                                       |
-| `FREDY_WORK_MAX_BACKOFF_MS`          | `3600000`  | Ceiling on retry backoff for work items.                                         |
+| `FREDY_WORK_MAX_BACKOFF_MS`          | `900000`   | Ceiling on retry and park backoff for work items.                                |
 | `FREDY_WORK_MAX_DEFERRALS`           | `24`       | Parks on a resource before work is abandoned.                                    |
 | `FREDY_WORK_MAX_PARK_MS`             | `86400000` | Age at which parked work is abandoned regardless of park count.                  |
-| `FREDY_RATE_MAX_FAILURES`            | `5`        | Attempts before a rating item is abandoned.                                      |
-| `FREDY_MAINTENANCE_MAX_FAILURES`     | `3`        | Attempts before a maintenance item is abandoned.                                 |
-| `FREDY_LIVENESS_MAX_FAILURES`        | `3`        | Attempts before a liveness probe is abandoned.                                   |
-| `FREDY_MARKET_MODEL_MAX_FAILURES`    | `3`        | Attempts before a training item is abandoned.                                    |
 | `FREDY_NOTIFY_MAX_FAILURES`          | `6`        | Attempts before a notification is abandoned.                                     |
 | `FREDY_WORKER_RESTART_DELAY_MS`      | `5000`     | Delay before restarting a crashed worker loop.                                   |
 
@@ -250,7 +251,6 @@ exists, it is listed here.
 | `FREDY_MARKET_MODEL_CRON`             | `0 2 * * *` | Market training schedule; "0" disables training entirely. |
 | `FREDY_MARKET_MODEL_INTERVAL_SECONDS` | `86400`     | Minimum seconds between retrains; 0 disables training.    |
 | `FREDY_MARKET_MODEL_RUN_TIMEOUT_MS`   | `1800000`   | Deadline for one retrain run.                             |
-| `FREDY_MARKET_SURFACE_MIN_CONFIDENCE` | `0.25`      | Minimum surface-cell confidence.                          |
 | `FREDY_PYTHON_BIN`                    | `python3`   | Python used for the LightGBM trainer.                     |
 
 #### Maintenance
@@ -357,17 +357,27 @@ in-flight requests.
 
 ## Maintenance
 
-Database upkeep runs automatically as durable pipeline work. The only operator
-command is read-only:
+Database upkeep runs automatically as durable pipeline work. The operator
+commands are a read-only health report and a settings editor:
 
 ```bash
 yarn maintenance status
+yarn maintenance settings list
 ```
 
 `status` checks the migration ledger, SQLite integrity, foreign keys, queue
 state, claim coverage, audit relationships, and full-text coverage. Dedupe,
 payload compaction, orphan-media cleanup, terminal work-row pruning, and optional
 vacuuming have no manual mutation path.
+
+`settings` is the only write path into the `settings` table, which is where
+`proxyUrl` and `blacklist` live. Values are JSON, so strings need quotes:
+
+```bash
+yarn maintenance settings set proxyUrl '"socks5://user:pass@host:port"'
+yarn maintenance settings get blacklist
+yarn maintenance settings unset proxyUrl
+```
 
 The scheduled pass records its verdict, and `/health` serves that recorded
 verdict with its age rather than recomputing an integrity check on every liveness
@@ -380,7 +390,8 @@ first pass after a long gap can remove a great deal at once.
 
 ImmoScout uses its mobile API. The other providers use CloakBrowser. On a
 datacenter host, a German residential proxy may be needed; store it in the
-`proxyUrl` application setting. Supported formats include:
+`proxyUrl` application setting (`yarn maintenance settings set proxyUrl '"..."'`).
+Supported formats include:
 
 ```text
 http://user:pass@host:port

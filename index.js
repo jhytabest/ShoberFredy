@@ -7,7 +7,6 @@ import fs from 'fs';
 import { checkIfConfigIsAccessible, getProviders, refreshConfig } from './lib/utils.js';
 import { runMigrations } from './lib/services/storage/migrations/migrate.js';
 import logger from './lib/services/logger.js';
-import { getSettings } from './lib/services/storage/settingsStorage.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
 import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
@@ -44,8 +43,6 @@ if (process.exitCode) {
   throw new Error('Database migrations failed; refusing to start against an incomplete schema.');
 }
 
-const settings = await getSettings();
-
 const { dir: sqliteDir } = await computeDbPath();
 if (!fs.existsSync(sqliteDir)) {
   fs.mkdirSync(sqliteDir, { recursive: true });
@@ -53,9 +50,7 @@ if (!fs.existsSync(sqliteDir)) {
 
 const providers = await getProviders();
 
-const INTERVAL = settings.interval * 60 * 1000;
-
-await startHealthServer(settings.port || 9998);
+await startHealthServer(env('FREDY_HEALTH_PORT'));
 
 try {
   await startMetricsExporterProcess();
@@ -85,4 +80,4 @@ const startedWorkers = [
 ];
 expectWorkers(startedWorkers.filter(Boolean));
 
-initJobExecutionService({ providers, settings, intervalMs: INTERVAL });
+initJobExecutionService({ providers });

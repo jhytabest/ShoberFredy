@@ -1,10 +1,11 @@
 # Shoberfredy
 
 Shoberfredy is a private, single-user homeserver application for finding
-Berlin rental listings. It discovers listings from ImmoScout24, Immowelt,
-Kleinanzeigen, and WG-Gesucht, extracts structured facts with an LLM,
-deduplicates across portals, prices each listing against two local market
-models, and sends accepted listings to Telegram.
+German rental listings, one job per search, any number of cities. It
+discovers listings from ImmoScout24, Immowelt, Kleinanzeigen, and WG-Gesucht,
+extracts structured facts with an LLM, deduplicates across portals and cities,
+prices each listing against its own city's market models, and sends accepted
+listings to Telegram.
 
 It began as a fork of [Fredy](https://github.com/orangecoding/fredy) by
 Christian Kellner (orangecoding) and keeps his copyright notice at the head of
@@ -16,6 +17,26 @@ decorative.
 
 This README is the only document in the repository. Anything that needed saying
 beside the code is said here instead.
+
+## Three levels
+
+One central pipeline serves many providers and many jobs, and each job is
+fully self-describing. There are exactly three levels, and configuration
+lives at exactly one of them:
+
+| Level              | Holds                                                                                                             | Configurable?      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| **Deployment**      | secrets, kill switches, timeouts, and every other tuning knob (`env`); `proxyUrl`, mutable at runtime (`settings`); `sqlitepath` (`config.json`) | yes                 |
+| **Portal adapter**  | how to read one site: selectors, `normalize`, `captureDetails`, pagination                                        | no — code only      |
+| **Job**             | everything about one search: city, cadence, filters, providers, notification | yes                 |
+
+A portal adapter (`lib/provider/*.js`) never carries per-job state. Its
+`init(sourceConfig)` is a pure builder: it returns a fresh config object
+carrying that job's URL, so two jobs discovering the same portal concurrently
+never see each other's search. Nothing about one job's configuration is
+stored where another job's code would read it — the same principle that keeps
+one job's blacklist from leaking into another's, applied to the adapter layer
+too.
 
 ## Architecture
 
@@ -35,11 +56,23 @@ flowchart LR
   M["Upkeep schedule"] --> N["pipeline_work: maintenance"]
 ```
 
-Discovery uses the interval configured in the application settings. Detail
-capture, parsing, rating, notification, model training, and database upkeep are
-work kinds in one durable queue. Each item has one shared lease, retry,
-terminal-state, and audit contract. Process restarts reclaim expired work rather
-than running repair scripts.
+Discovery cadence is each job's own — `interval` and `workingHours` live on the
+job document, not on one deployment-wide setting. One central scheduler ticks
+every `FREDY_SCHEDULER_TICK_MS` and checks due-ness per `(job, provider)` pair
+against a persisted `job_provider_schedule` row, so a restart does not
+stampede every pair into running at once. Same-cadence jobs land at different
+minutes: each pair gets a deterministic phase offset from a hash of its own
+`(job, provider)` key, modulo its interval. A provider is one lane — at most
+one discovery in flight per portal, plus a minimum gap
+(`FREDY_DISCOVERY_MIN_PORTAL_GAP_MS`) between consecutive hits of it — while
+different portals run concurrently under a global cap
+(`FREDY_DISCOVERY_CONCURRENCY`). A pair that slips past several due windows
+while waiting for a lane still only runs once, not once per window missed.
+
+Detail capture, parsing, rating, notification, model training, and database
+upkeep are work kinds in one durable queue. Each item has one shared lease,
+retry, terminal-state, and audit contract. Process restarts reclaim expired
+work rather than running repair scripts.
 
 The market cron only produces a durable work item; it never performs training
 itself. Dedupe and filtering are pipeline stages, not maintenance commands.
@@ -69,14 +102,24 @@ rating.
 
 Filtering is deliberately uneven, because the stages differ in what they cost:
 
-| Stage      | Filters on                                                      | Costs        |
-| ---------- | --------------------------------------------------------------- | ------------ |
-| Card       | Blacklist and specification, over what the card states          | nothing      |
-| Extraction | Structured LLM fields, and geography from the canonical address | one LLM call |
+| Stage      | Filters on                                                                | Costs        |
+| ---------- | ------------------------------------------------------------------------- | ------------ |
+| Card       | The job's blacklist and specification, over what the card states           | nothing      |
+| Extraction | The job's intent filter and specification, and geography from the address  | one LLM call |
 
-There is no text matching after extraction. The model already answers "is this a
-swap, a sublet, a WG room, furnished, fixed-term?" as validated enum fields, and
-grepping the page for the same thing asks twice and believes the worse answer.
+The two lists are different kinds of thing and both belong to the job. The
+blacklist is free text and only ever read at the card stage, where free text is
+all there is. The intent filter is codes from a closed vocabulary — `swap`,
+`wg_room`, `sublet`, `furnished`, `relisting_platform`, `fixed_term` — read only
+after extraction, against validated enum fields the model already filled in.
+
+There is still no text matching after extraction. The model answers "is this a
+swap, a sublet, a WG room, furnished, fixed-term?" directly, and grepping the
+page for the same thing asks twice and believes the worse answer. What changed is
+that the answer is compared against a list the job owns rather than inferred from
+whichever words happened to be in one deployment-wide blacklist: a search for a
+WG room and a search for a whole flat want opposite verdicts on the same field,
+and one list cannot hold both.
 
 An advert refused at the card stage never becomes a listing. It is recorded in
 `source_rejections` together with the claims that identify it, which is what
@@ -88,6 +131,29 @@ read. Roughly a third of geocodes resolve only to a district or postcode
 centroid, so a polygon decision is accurate to a neighbourhood rather than a
 building. That is accepted deliberately: the alternative is guessing from the
 scraped card, which is worse evidence for the same answer.
+
+A job with no `spatialFilter` has no area limit, and then the geography of a
+listing decides nothing about its verdict — the polygon test and the
+`no_coordinates` refusal are both skipped rather than passed.
+
+### One city, one market
+
+Adverts routinely give a street and no city, and a German street name matches in
+a hundred towns. So a job names the city it searches, and that city does two
+things: it anchors the geocoder's fallback candidates, and — folded to a market
+key, `München` to `muenchen` — it is the market a job's listings fall back to.
+
+A listing's market is read from the locality the geocoder returned, not from the
+job that found it, because a Munich search can still surface a flat one town
+over. A listing that resolves to no city keeps a null market, is left out of
+every corpus, and is delivered unscored. Pricing it off another city's model
+would be worse than saying nothing.
+
+Each market trains and serves its own ridge and GBM artifacts, keyed by
+`(family, market)`. One city failing to train leaves the others alone, and a new
+city simply has no model until it has enough adverts to fit one — its listings
+arrive unscored in the meantime, which is what the queue's `waiting_model`
+outcome already meant.
 
 ## Data policy
 
@@ -106,8 +172,16 @@ runs, because dropping a constrained column means rebuilding the table.
 - A listing that stops being advertised becomes `gone`. Scheduled maintenance
   re-fetches the oldest still-active listings; the probe is a page fetch and
   nothing else, so confirming a flat is still up costs no LLM call.
-- Blacklist terms are one deployment-wide setting. Jobs carry only the two
-  things that are genuinely theirs, a spatial filter and a specification.
+- A job carries everything about one search: its city, its cadence (`interval`,
+  `workingHours`), its providers (each with an optional per-provider
+  `maxPages`), its notification target, its blacklist, its intent filter, its
+  spatial filter and its specification. Nothing about one search is stored
+  where another search would read it, and there is no read-time inheritance
+  from a deployment-wide default.
+- The provider circuit breaker (`provider_breaker_state`) is keyed by
+  `(provider, market)`, not by provider alone — a portal blocking one city's
+  search pauses discovery for that city only, not for every other city
+  searching the same portal.
 - `pipeline_work.status` is lifecycle only. What became of an item is `outcome`,
   why is `outcome_code` from a closed vocabulary, and `last_error` holds an
   exception message or nothing at all.
@@ -138,11 +212,11 @@ docker run -d --name shoberfredy \
   ghcr.io/jhytabest/shoberfredy:master
 ```
 
-The only HTTP surface is the health endpoint at
-<http://localhost:9998/health>; listings are delivered through Telegram. Besides
-liveness it reports, without either being able to fail a deploy, how long ago
-each provider last returned listings and the data-integrity verdict scheduled
-maintenance last recorded.
+The only HTTP surface is the health endpoint, on `FREDY_HEALTH_PORT` (default
+`9998`, read once at startup) at <http://localhost:9998/health>; listings are
+delivered through Telegram. Besides liveness it reports, without either being
+able to fail a deploy, how long ago each provider last returned listings and
+the data-integrity verdict scheduled maintenance last recorded.
 The image runs as UID/GID `10001`; the supplied Compose file also uses a
 read-only root filesystem, drops Linux capabilities, and enables
 `no-new-privileges`.
@@ -169,9 +243,9 @@ setting is the SQLite directory:
 ## Runtime controls
 
 Every environment variable the application reads is declared in
-`lib/shared/env.js`. Reading an undeclared name throws, so this table is
-generated from that registry rather than maintained alongside it — if a knob
-exists, it is listed here.
+`lib/shared/env.js`. Reading an undeclared name throws, so nothing is read
+outside that registry — but the table below is hand-maintained alongside it,
+not generated from it; keep the two in sync when the registry changes.
 
 #### Credentials
 
@@ -191,26 +265,35 @@ exists, it is listed here.
 | `FREDY_PARSER_ENABLED`       | `true`  | Set 0 to stop the LLM parser worker.               |
 | `FREDY_RATING_ENABLED`       | `true`  | Set 0 to stop market rating.                       |
 
-#### Discovery and the work queue
+#### Discovery scheduler
 
-| Variable                             | Default    | Purpose                                                                          |
-| ------------------------------------ | ---------- | -------------------------------------------------------------------------------- |
-| `FREDY_DETAIL_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one detail capture.                                                 |
-| `FREDY_DETAIL_MAX_FAILURES`          | `8`        | Attempts before a detail item is abandoned.                                      |
-| `FREDY_DISCOVERY_MAX_PAGES`          | `20`       | Override the per-provider page ceiling; unset uses the provider's own limit (3). |
-| `FREDY_DISCOVERY_TIMEOUT_MS`         | `120000`   | Deadline for one provider discovery run.                                         |
-| `FREDY_PARSER_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one parse (text + repair).                                          |
-| `FREDY_PARSER_MAX_ITEM_FAILURES`     | `8`        | Attempts before a parse item is abandoned.                                       |
-| `FREDY_NOTIFICATION_ITEM_TIMEOUT_MS` | `120000`   | Deadline for one notification digest.                                            |
-| `FREDY_NOTIFICATION_BATCH_SIZE`      | `50`       | Deliveries considered for one digest.                                            |
-| `FREDY_RATING_ITEM_TIMEOUT_MS`       | `30000`    | Deadline for one market rating.                                                  |
-| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS`  | `1800000`  | Deadline for automatic database upkeep.                                          |
-| `FREDY_WORK_IDLE_POLL_MS`            | `1000`     | Idle sleep between empty work-queue polls.                                       |
-| `FREDY_WORK_MAX_BACKOFF_MS`          | `900000`   | Ceiling on retry and park backoff for work items.                                |
-| `FREDY_WORK_MAX_DEFERRALS`           | `24`       | Parks on a resource before work is abandoned.                                    |
-| `FREDY_WORK_MAX_PARK_MS`             | `86400000` | Age at which parked work is abandoned regardless of park count.                  |
-| `FREDY_NOTIFY_MAX_FAILURES`          | `6`        | Attempts before a notification is abandoned.                                     |
-| `FREDY_WORKER_RESTART_DELAY_MS`      | `5000`     | Delay before restarting a crashed worker loop.                                   |
+| Variable                           | Default  | Purpose                                                                                                                 |
+| ----------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `FREDY_SCHEDULER_TICK_MS`          | `15000`  | How often the scheduler checks for due jobs.                                                                           |
+| `FREDY_DISCOVERY_CONCURRENCY`      | `3`      | Global cap on discovery runs in flight at once, across all portals.                                                    |
+| `FREDY_DISCOVERY_MIN_PORTAL_GAP_MS`| `5000`   | Minimum gap between consecutive discovery hits of the same portal, across jobs.                                        |
+| `FREDY_DISCOVERY_MAX_PAGES`        | `20`     | Deployment-wide page-ceiling override, under a job's own `provider[].maxPages`; unset uses the adapter's own limit (3). |
+| `FREDY_DISCOVERY_TIMEOUT_MS`       | `120000` | Deadline for one provider discovery run.                                                                               |
+| `FREDY_HEALTH_PORT`                | `9998`   | Port for the `/health` HTTP server; read once at startup.                                                              |
+
+#### The work queue
+
+| Variable                             | Default    | Purpose                                                          |
+| ------------------------------------ | ---------- | ------------------------------------------------------------------ |
+| `FREDY_DETAIL_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one detail capture.                                 |
+| `FREDY_DETAIL_MAX_FAILURES`          | `8`        | Attempts before a detail item is abandoned.                      |
+| `FREDY_PARSER_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one parse (text + repair).                          |
+| `FREDY_PARSER_MAX_ITEM_FAILURES`     | `8`        | Attempts before a parse item is abandoned.                       |
+| `FREDY_NOTIFICATION_ITEM_TIMEOUT_MS` | `120000`   | Deadline for one notification digest.                            |
+| `FREDY_NOTIFICATION_BATCH_SIZE`      | `50`       | Deliveries considered for one digest.                            |
+| `FREDY_RATING_ITEM_TIMEOUT_MS`       | `30000`    | Deadline for one market rating.                                  |
+| `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS`  | `1800000`  | Deadline for automatic database upkeep.                          |
+| `FREDY_WORK_IDLE_POLL_MS`            | `1000`     | Idle sleep between empty work-queue polls.                       |
+| `FREDY_WORK_MAX_BACKOFF_MS`          | `900000`   | Ceiling on retry and park backoff for work items.                |
+| `FREDY_WORK_MAX_DEFERRALS`           | `24`       | Parks on a resource before work is abandoned.                    |
+| `FREDY_WORK_MAX_PARK_MS`             | `86400000` | Age at which parked work is abandoned regardless of park count.  |
+| `FREDY_NOTIFY_MAX_FAILURES`          | `6`        | Attempts before a notification is abandoned.                     |
+| `FREDY_WORKER_RESTART_DELAY_MS`      | `5000`     | Delay before restarting a crashed worker loop.                   |
 
 #### LLM
 
@@ -358,11 +441,12 @@ in-flight requests.
 ## Maintenance
 
 Database upkeep runs automatically as durable pipeline work. The operator
-commands are a read-only health report and a settings editor:
+commands are a read-only health report, a settings editor, and a job editor:
 
 ```bash
 yarn maintenance status
 yarn maintenance settings list
+yarn maintenance jobs list
 ```
 
 `status` checks the migration ledger, SQLite integrity, foreign keys, queue
@@ -371,13 +455,57 @@ payload compaction, orphan-media cleanup, terminal work-row pruning, and optiona
 vacuuming have no manual mutation path.
 
 `settings` is the only write path into the `settings` table, which is where
-`proxyUrl` and `blacklist` live. Values are JSON, so strings need quotes:
+`proxyUrl` lives. Values are JSON, so strings need quotes:
 
 ```bash
 yarn maintenance settings set proxyUrl '"socks5://user:pass@host:port"'
-yarn maintenance settings get blacklist
 yarn maintenance settings unset proxyUrl
 ```
+
+`jobs` is the only write path into the `jobs` table. Every document is validated
+before it is stored — provider ids against the loaded providers, intent codes
+against the closed vocabulary, `notify` fields against what Telegram needs,
+`spatialFilter` against carrying an actual polygon — because a filter the
+pipeline cannot read is worse than no filter: the search keeps running without
+it. `jobs list` and `jobs show` redact `notify.token`, since it stays in the
+database.
+
+```bash
+yarn maintenance jobs list
+yarn maintenance jobs show <id>
+yarn maintenance jobs add '<json-document>'
+yarn maintenance jobs set <id> specFilter '{"maxPrice":900}'
+yarn maintenance jobs patch <id> '{"blacklist":["Tausch"],"intentFilter":["swap"]}'
+yarn maintenance jobs disable <id>
+yarn maintenance jobs remove <id>
+```
+
+A job document looks like this — everything about one search, with no
+deployment-wide default left to inherit. `spatialFilter: null` means no area
+limit, `workingHours` empty means no time-of-day limit, and several provider
+entries may share an id when one portal needs more than one search URL:
+
+```json
+{
+  "name": "München",
+  "city": "München",
+  "interval": 15,
+  "workingHours": { "from": "", "to": "" },
+  "provider": [{ "id": "wgGesucht", "url": "https://www.wg-gesucht.de/...", "maxPages": 3 }],
+  "notify": { "token": "...", "chatId": "-100...", "threadId": null, "plainText": false },
+  "blacklist": ["Tausch"],
+  "intentFilter": ["swap", "relisting_platform"],
+  "specFilter": { "maxPrice": 900 },
+  "spatialFilter": null
+}
+```
+
+`interval` and `workingHours` are cadence, not decision — editing them does not
+change `config_hash` or re-decide anything. Editing a job's filters
+(`blacklist`, `intentFilter`, `specFilter`, `spatialFilter`) does change its
+`config_hash`, so the adverts it has already decided are re-decided against
+the new configuration on the next pass. That costs no LLM calls: extraction is
+keyed by advert and is already stored.
 
 The scheduled pass records its verdict, and `/health` serves that recorded
 verdict with its age rather than recomputing an integrity check on every liveness

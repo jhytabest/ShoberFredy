@@ -1,14 +1,11 @@
 node_modules/
-ui/public/
 db/*.json
 db/*.db*
 db/media/
-db/surface/
 npm-debug.log
 .DS_Store
 .idea
 .vscode
-tools/release/config.json
 geocoder.env
 .env.local
 .live-mirror/

@@ -69,14 +69,24 @@ rating.
 
 Filtering is deliberately uneven, because the stages differ in what they cost:
 
-| Stage      | Filters on                                                      | Costs        |
-| ---------- | --------------------------------------------------------------- | ------------ |
-| Card       | Blacklist and specification, over what the card states          | nothing      |
-| Extraction | Structured LLM fields, and geography from the canonical address | one LLM call |
+| Stage      | Filters on                                                                | Costs        |
+| ---------- | ------------------------------------------------------------------------- | ------------ |
+| Card       | The job's blacklist and specification, over what the card states           | nothing      |
+| Extraction | The job's intent filter and specification, and geography from the address  | one LLM call |
 
-There is no text matching after extraction. The model already answers "is this a
-swap, a sublet, a WG room, furnished, fixed-term?" as validated enum fields, and
-grepping the page for the same thing asks twice and believes the worse answer.
+The two lists are different kinds of thing and both belong to the job. The
+blacklist is free text and only ever read at the card stage, where free text is
+all there is. The intent filter is codes from a closed vocabulary — `swap`,
+`wg_room`, `sublet`, `furnished`, `relisting_platform`, `fixed_term` — read only
+after extraction, against validated enum fields the model already filled in.
+
+There is still no text matching after extraction. The model answers "is this a
+swap, a sublet, a WG room, furnished, fixed-term?" directly, and grepping the
+page for the same thing asks twice and believes the worse answer. What changed is
+that the answer is compared against a list the job owns rather than inferred from
+whichever words happened to be in one deployment-wide blacklist: a search for a
+WG room and a search for a whole flat want opposite verdicts on the same field,
+and one list cannot hold both.
 
 An advert refused at the card stage never becomes a listing. It is recorded in
 `source_rejections` together with the claims that identify it, which is what
@@ -88,6 +98,29 @@ read. Roughly a third of geocodes resolve only to a district or postcode
 centroid, so a polygon decision is accurate to a neighbourhood rather than a
 building. That is accepted deliberately: the alternative is guessing from the
 scraped card, which is worse evidence for the same answer.
+
+A job with no `spatialFilter` has no area limit, and then the geography of a
+listing decides nothing about its verdict — the polygon test and the
+`no_coordinates` refusal are both skipped rather than passed.
+
+### One city, one market
+
+Adverts routinely give a street and no city, and a German street name matches in
+a hundred towns. So a job names the city it searches, and that city does two
+things: it anchors the geocoder's fallback candidates, and — folded to a market
+key, `München` to `muenchen` — it is the market a job's listings fall back to.
+
+A listing's market is read from the locality the geocoder returned, not from the
+job that found it, because a Munich search can still surface a flat one town
+over. A listing that resolves to no city keeps a null market, is left out of
+every corpus, and is delivered unscored. Pricing it off another city's model
+would be worse than saying nothing.
+
+Each market trains and serves its own ridge and GBM artifacts, keyed by
+`(family, market)`. One city failing to train leaves the others alone, and a new
+city simply has no model until it has enough adverts to fit one — its listings
+arrive unscored in the meantime, which is what the queue's `waiting_model`
+outcome already meant.
 
 ## Data policy
 
@@ -106,8 +139,9 @@ runs, because dropping a constrained column means rebuilding the table.
 - A listing that stops being advertised becomes `gone`. Scheduled maintenance
   re-fetches the oldest still-active listings; the probe is a page fetch and
   nothing else, so confirming a flat is still up costs no LLM call.
-- Blacklist terms are one deployment-wide setting. Jobs carry only the two
-  things that are genuinely theirs, a spatial filter and a specification.
+- A job carries everything that decides what it accepts: its city, its blacklist,
+  its intent filter, its spatial filter and its specification. Nothing about one
+  search is stored where another search would read it.
 - `pipeline_work.status` is lifecycle only. What became of an item is `outcome`,
   why is `outcome_code` from a closed vocabulary, and `last_error` holds an
   exception message or nothing at all.
@@ -358,11 +392,12 @@ in-flight requests.
 ## Maintenance
 
 Database upkeep runs automatically as durable pipeline work. The operator
-commands are a read-only health report and a settings editor:
+commands are a read-only health report, a settings editor, and a job editor:
 
 ```bash
 yarn maintenance status
 yarn maintenance settings list
+yarn maintenance jobs list
 ```
 
 `status` checks the migration ledger, SQLite integrity, foreign keys, queue
@@ -371,13 +406,52 @@ payload compaction, orphan-media cleanup, terminal work-row pruning, and optiona
 vacuuming have no manual mutation path.
 
 `settings` is the only write path into the `settings` table, which is where
-`proxyUrl` and `blacklist` live. Values are JSON, so strings need quotes:
+`proxyUrl` lives. Values are JSON, so strings need quotes:
 
 ```bash
 yarn maintenance settings set proxyUrl '"socks5://user:pass@host:port"'
-yarn maintenance settings get blacklist
 yarn maintenance settings unset proxyUrl
 ```
+
+`jobs` is the only write path into the `jobs` table. Every document is validated
+before it is stored — provider ids against the loaded providers, intent codes
+against the closed vocabulary, adapter fields against what Telegram needs,
+`spatialFilter` against carrying an actual polygon — because a filter the
+pipeline cannot read is worse than no filter: the search keeps running without
+it.
+
+```bash
+yarn maintenance jobs list
+yarn maintenance jobs show <id>
+yarn maintenance jobs add '<json-document>'
+yarn maintenance jobs set <id> specFilter '{"maxPrice":900}'
+yarn maintenance jobs patch <id> '{"blacklist":["Tausch"],"intentFilter":["swap"]}'
+yarn maintenance jobs disable <id>
+yarn maintenance jobs remove <id>
+```
+
+A job document looks like this. `spatialFilter: null` means no area limit, and
+several entries may share a provider id when one portal needs more than one
+search URL:
+
+```json
+{
+  "name": "München",
+  "city": "München",
+  "provider": [{ "id": "wgGesucht", "url": "https://www.wg-gesucht.de/..." }],
+  "notificationAdapter": [
+    { "id": "telegram", "fields": { "token": "...", "chatId": "-100..." } }
+  ],
+  "blacklist": ["Tausch"],
+  "intentFilter": ["swap", "relisting_platform"],
+  "specFilter": { "maxPrice": 900 },
+  "spatialFilter": null
+}
+```
+
+Editing a job's filters changes its `config_hash`, so the adverts it has already
+decided are re-decided against the new configuration on the next pass. That costs
+no LLM calls: extraction is keyed by advert and is already stored.
 
 The scheduled pass records its verdict, and `/health` serves that recorded
 verdict with its age rather than recomputing an integrity check on every liveness

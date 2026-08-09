@@ -6,15 +6,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import theme
 from grafana_foundation_sdk.builders import dashboard as dashboard_builder
-from grafana_foundation_sdk.models.dashboard import DynamicConfigValue
+from grafana_foundation_sdk.models.dashboard import DynamicConfigValue, VariableRefresh, VariableSort
 
 UID = "fredy-market"
 OUTPUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "grafana-dashboard.json",
 )
-
-MODEL = '{model="$model"}'
 
 PARTITION = [
     {"id": "convertFieldType", "options": {"conversions": [{"destinationType": "time", "targetField": "date"}]}},
@@ -37,6 +35,16 @@ def build():
     return (
         theme.page("Fredy Market", UID, ["fredy", "market"], refresh="1m", from_val="now-7d")
         .with_variable(dashboard_builder.CustomVariable("model").values("gbm,ridge").label("Model"))
+        # Markets come from the data, not from a list here: a city is added by
+        # creating a job, and the dashboard should follow without an edit.
+        .with_variable(
+            dashboard_builder.QueryVariable("market")
+            .label("Market")
+            .datasource(theme.DATASOURCE)
+            .query("label_values(fredy_market_prediction_model_created_timestamp_seconds, market)")
+            .refresh(VariableRefresh.ON_TIME_RANGE_CHANGED)
+            .sort(VariableSort.ALPHABETICAL_ASC)
+        )
         # ---------------------------------------------------------------- pipeline
         .with_row(dashboard_builder.Row("Pipeline"))
         .with_panel(
@@ -141,7 +149,7 @@ def build():
             .unit("percent")
             .decimals(1)
             .thresholds(theme.bad_above(18, 25))
-            .targets([theme.query(f'fredy_market_model_error_percent{{model="$model",method="cv",stat="mdape"}}', instant=True)])
+            .targets([theme.query(f'fredy_market_model_error_percent{{model="$model",market="$market",method="cv",stat="mdape"}}', instant=True)])
         )
         .with_panel(
             theme.metric_tile()
@@ -155,8 +163,8 @@ def build():
             .targets(
                 [
                     theme.query(
-                        '100 * (1 - fredy_market_model_error_percent{model="$model",method="cv",stat="mdape"}'
-                        ' / on (model) fredy_market_model_error_percent{model="$model",method="naive",stat="mdape"})',
+                        '100 * (1 - fredy_market_model_error_percent{model="$model",market="$market",method="cv",stat="mdape"}'
+                        ' / on (model, market) fredy_market_model_error_percent{model="$model",market="$market",method="naive",stat="mdape"})',
                         instant=True,
                     )
                 ]
@@ -171,7 +179,7 @@ def build():
             .unit("percent")
             .decimals(0)
             .thresholds(theme.good_above(30, 45))
-            .targets([theme.query('fredy_market_model_error_percent{model="$model",method="cv",stat="ppe10"}', instant=True)])
+            .targets([theme.query('fredy_market_model_error_percent{model="$model",market="$market",method="cv",stat="ppe10"}', instant=True)])
         )
         .with_panel(
             theme.metric_tile()
@@ -214,7 +222,7 @@ def build():
             .targets(
                 [
                     theme.query(
-                        'time() - fredy_market_prediction_model_created_timestamp_seconds{model="$model"}',
+                        'time() - fredy_market_prediction_model_created_timestamp_seconds{model="$model",market="$market"}',
                         instant=True,
                     )
                 ]
@@ -226,7 +234,7 @@ def build():
             .description("Out-of-fold error against the naive baseline, per retrain.")
             .span(12)
             .unit("percent")
-            .targets([theme.query('fredy_market_model_error_percent{model="$model",stat="mdape"}', "{{method}}")])
+            .targets([theme.query('fredy_market_model_error_percent{model="$model",market="$market",stat="mdape"}', "{{method}}")])
         )
         .with_panel(
             theme.ranking()
@@ -235,7 +243,7 @@ def build():
             .span(12)
             .unit("short")
             .thresholds(theme.flat("green"))
-            .targets([theme.query('fredy_market_delta_distribution{model="$model"}', "{{bucket}}", True)])
+            .targets([theme.query('fredy_market_delta_distribution{model="$model",market="$market"}', "{{bucket}}", True)])
         )
         # --------------------------------------------------------------- listings
         .with_row(dashboard_builder.Row("Listings"))
@@ -262,7 +270,7 @@ def build():
             .description("Ranked by distance below the model's fair price. Titles link to the advert.")
             .span(24)
             .height(10)
-            .targets([theme.query('fredy_market_top_listing{model="$model",window="7d"}', instant=True, fmt="table")])
+            .targets([theme.query('fredy_market_top_listing{model="$model",market="$market",window="7d"}', instant=True, fmt="table")])
             .transformations(
                 [
                     {
@@ -333,7 +341,7 @@ def build():
             .span(24)
             .unit("currencyEUR")
             .decimals(1)
-            .targets([theme.query("fredy_market_daily_price_per_sqm", instant=True, fmt="table")])
+            .targets([theme.query('fredy_market_daily_price_per_sqm{market="$market"}', instant=True, fmt="table")])
             .transformations(partition_by("quantile"))
         )
     )

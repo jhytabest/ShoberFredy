@@ -8,6 +8,8 @@ import { getMigrationStatus } from '../../lib/services/storage/migrations/migrat
 import { buildDatabaseMaintenanceReport } from '../../lib/services/maintenance/databaseReport.js';
 import { getSettings, upsertSettings } from '../../lib/services/storage/settingsStorage.js';
 import { refreshConfig } from '../../lib/utils.js';
+import { JOBS_USAGE, runJobs } from './jobsCommand.js';
+import { JobDocumentError } from '../../lib/services/storage/jobDocument.js';
 
 const USAGE = `Usage:
   yarn maintenance status
@@ -15,15 +17,17 @@ const USAGE = `Usage:
   yarn maintenance settings get <name>
   yarn maintenance settings set <name> <json-value>
   yarn maintenance settings unset <name>
+${JOBS_USAGE}
 
 Values are JSON, so quote strings:
   yarn maintenance settings set proxyUrl '"http://user:pass@host:port"'
-  yarn maintenance settings set blacklist '["Tausch","Untermiete"]'
+  yarn maintenance jobs set <id> blacklist '["Tausch","Untermiete"]'
 `;
 
-// Settings written straight into SQLite are invisible and easy to get wrong
-// (the value column is JSON, not text). These live behind the same helpers the
-// application reads through, so a value set here is a value the pipeline sees.
+// Settings and jobs written straight into SQLite are invisible and easy to get
+// wrong (the columns are JSON, not text). These live behind the same helpers the
+// application reads through, so a value set here is a value the pipeline sees,
+// and a job written here is one every stage can read.
 const command = process.argv[2] || 'status';
 const args = process.argv.slice(3);
 
@@ -42,6 +46,13 @@ if (command === 'status' && args.length === 0) {
   failed = !result.healthy;
 } else if (command === 'settings') {
   result = await runSettings(args);
+} else if (command === 'jobs') {
+  try {
+    result = await runJobs(args, { usageError });
+  } catch (error) {
+    if (!(error instanceof JobDocumentError)) throw error;
+    usageError(`That job would not be read as written:\n  ${error.problems.join('\n  ')}`);
+  }
 } else {
   usageError(`Unknown command '${command}'`);
 }

@@ -14,11 +14,6 @@
       "platformAutomerge": true
     },
     {
-      "description": "grafana-foundation-sdk versions are <build-epoch>!<grafana-minor>, and within one publishing wave the epoch rises as the minor falls — so the highest version on offer is the oldest schema. Majors automerge here, so pin the minor and let only the build epoch advance.",
-      "matchPackageNames": ["grafana-foundation-sdk", "grafana_foundation_sdk"],
-      "allowedVersions": "/^\\d+!11\\.6\\./"
-    },
-    {
       "description": "Keep unrelated updates independently attributable and reversible.",
       "matchPackageNames": ["*"],
       "groupName": null

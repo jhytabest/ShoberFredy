@@ -377,32 +377,13 @@ yarn format:check
 yarn lint
 ```
 
-The two dashboards this repo owns — `fredy-hunt` (does the search work: a map
-of active listings, best-priced deals, market trend, what it costs to run)
-and `fredy-pipeline` (is the machinery working: funnel, refusals, model
-quality) — live under `monitoring/grafana-dashboards/`, generated, not edited.
-`monitoring/dashboards/build` runs both generator scripts through the Grafana
-Foundation SDK and the shared [`homeserver-grafana-theme`](https://github.com/jhytabest/homeserver-grafana-theme)
-package, pinned in `monitoring/dashboards/requirements.txt`:
+Fredy's purpose and pipeline dashboards live with the shared theme in the
+central homeserver observability source. This repository owns only the
+bounded operational metrics they query; the homeserver release builds and
+provisions the dashboards centrally.
 
-```bash
-yarn dashboard:setup
-yarn dashboard:build
-```
-
-The theme package is the same one the homeserver repo pins in
-`infra/ansible/host_vars/versions.yml`. It used to be a `theme.py` file
-copied verbatim into both repos; a pinned package can't drift the way two
-copies of the same file eventually do.
-
-The SDK version is pinned and Renovate is constrained to the 11.6 line. Its
-version strings are `<build-epoch>!<grafana-minor>`, and within one publishing
-wave the epoch rises as the minor falls, so an unconstrained bump silently moves
-the generator onto an older schema.
-
-CI runs both checks, verifies the committed dashboard still matches its
-generator, builds the Docker image, starts it through the real migration path,
-and requires a healthy `/health` response before publishing.
+CI checks the application, builds the Docker image, starts it through the real
+migration path, and requires a healthy `/health` response before publishing.
 
 There is no test suite, and none should be added unless it is asked for.
 Verification here means running the real path against a production snapshot —

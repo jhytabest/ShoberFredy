@@ -1,2 +1,0 @@
-grafana_foundation_sdk==1769699379!11.6.0
-homeserver-grafana-theme @ git+https://github.com/jhytabest/homeserver-grafana-theme.git@v0.2.0

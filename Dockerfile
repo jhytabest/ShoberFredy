@@ -2,9 +2,7 @@ FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b2
 
 LABEL io.homeserver.monitoring.service="fredy" \
       io.homeserver.monitoring.metrics-port="9217" \
-      io.homeserver.monitoring.metrics-path="/metrics" \
-      io.homeserver.monitoring.dashboard="/opt/homeserver-monitoring/grafana-dashboard.json" \
-      io.homeserver.monitoring.dashboard-dir="/opt/homeserver-monitoring/dashboards"
+      io.homeserver.monitoring.metrics-path="/metrics"
 
 # System deps for CloakBrowser + build tools for native modules (better-sqlite3)
 # fonts-* packages below are CloakBrowser's recommended Linux font set
@@ -84,8 +82,6 @@ RUN node -e "import('cloakbrowser').then(({ensureBinary}) => ensureBinary())" \
 
 COPY index.js ./
 COPY tools ./tools
-COPY monitoring/grafana-dashboards /opt/homeserver-monitoring/dashboards
-COPY monitoring/grafana-dashboards/fredy-pipeline.json /opt/homeserver-monitoring/grafana-dashboard.json
 
 RUN ln -s /db /fredy/db \
   && ln -s /conf /fredy/conf

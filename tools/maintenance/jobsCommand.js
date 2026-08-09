@@ -22,11 +22,12 @@ export const JOBS_USAGE = `  yarn maintenance jobs list
   yarn maintenance jobs disable <id>
   yarn maintenance jobs remove <id>
 
-A job document is JSON:
-  { "name": "München", "city": "München",
-    "provider": [{ "id": "wgGesucht", "url": "https://..." }],
-    "notificationAdapter": [{ "id": "telegram",
-                              "fields": { "token": "...", "chatId": "-100..." } }],
+A job document is JSON. Every field it needs to run lives on it — there is no
+deployment-wide default left to inherit:
+  { "name": "München", "city": "München", "interval": 15,
+    "workingHours": { "from": "", "to": "" },
+    "provider": [{ "id": "wgGesucht", "url": "https://...", "maxPages": 3 }],
+    "notify": { "token": "...", "chatId": "-100..." },
     "blacklist": ["Tausch"], "intentFilter": ["swap"],
     "specFilter": { "maxPrice": 900 }, "spatialFilter": null }`;
 
@@ -38,7 +39,7 @@ export async function runJobs(args, { usageError }) {
   }
 
   if (action === 'show' && rest.length === 1) {
-    return required(getJob(rest[0]), rest[0], usageError);
+    return redactNotify(required(getJob(rest[0]), rest[0], usageError));
   }
 
   if (action === 'add' && rest.length === 1) {
@@ -87,7 +88,10 @@ function summarize(job) {
     city: job.city,
     market: job.market,
     enabled: job.enabled,
+    interval: job.interval,
+    workingHours: job.workingHours,
     providers: job.provider.map((entry) => entry.id),
+    notify: job.notify ? { ...job.notify, token: '(redacted)' } : null,
     blacklistTerms: job.blacklist.length,
     intentFilter: job.intentFilter,
     specFilter: job.specFilter,
@@ -95,6 +99,11 @@ function summarize(job) {
     activeAccepted: job.numberOfFoundListings,
     lastRunAt: job.lastRunAt,
   };
+}
+
+function redactNotify(job) {
+  if (!job?.notify?.token) return job;
+  return { ...job, notify: { ...job.notify, token: '(redacted)' } };
 }
 
 function required(job, id, usageError) {

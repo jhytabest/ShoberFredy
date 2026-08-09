@@ -61,9 +61,15 @@ jobs:
           python-version: '3.14'
 
       - name: Validate monitoring dashboard
+        env:
+          # Stacked PRs validate against the exact theme commit. The default
+          # branch continues to consume the release tag from requirements.txt.
+          HOMESERVER_GRAFANA_THEME_REF: ${{ github.event_name == 'pull_request' && '65b65ada396ebf535384e617ac7693f30d2f7ca5' || 'v0.2.0' }}
         run: |
           python3 -m venv .dashboard-venv
-          .dashboard-venv/bin/pip install --disable-pip-version-check -r monitoring/dashboards/requirements.txt
+          sed -E "s#(homeserver-grafana-theme\.git@)[^[:space:]]+#\1$HOMESERVER_GRAFANA_THEME_REF#" \
+            monitoring/dashboards/requirements.txt > "$RUNNER_TEMP/dashboard-requirements.txt"
+          .dashboard-venv/bin/pip install --disable-pip-version-check -r "$RUNNER_TEMP/dashboard-requirements.txt"
           .dashboard-venv/bin/python3 monitoring/dashboards/build --check
           jq empty monitoring/grafana-dashboards/fredy-hunt.json
           jq empty monitoring/grafana-dashboards/fredy-pipeline.json

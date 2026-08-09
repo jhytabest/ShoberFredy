@@ -377,28 +377,13 @@ yarn format:check
 yarn lint
 ```
 
-The Grafana dashboard in `monitoring/grafana-dashboard.json` is generated, not
-edited. `monitoring/dashboards/build` produces it from the Grafana Foundation
-SDK, and `theme.py` beside it holds the shared panel styling:
+Fredy's purpose and pipeline dashboards live with the shared theme in the
+central homeserver observability source. This repository owns only the
+bounded operational metrics they query; the homeserver release builds and
+provisions the dashboards centrally.
 
-```bash
-yarn dashboard:setup
-yarn dashboard:build
-```
-
-`theme.py` is duplicated in the homeserver repository on purpose. The two
-repositories release independently and neither may depend on the other, and
-publishing a package for seventy lines serving two dashboards would cost more
-than the duplication does.
-
-The SDK version is pinned and Renovate is constrained to the 11.6 line. Its
-version strings are `<build-epoch>!<grafana-minor>`, and within one publishing
-wave the epoch rises as the minor falls, so an unconstrained bump silently moves
-the generator onto an older schema.
-
-CI runs both checks, verifies the committed dashboard still matches its
-generator, builds the Docker image, starts it through the real migration path,
-and requires a healthy `/health` response before publishing.
+CI checks the application, builds the Docker image, starts it through the real
+migration path, and requires a healthy `/health` response before publishing.
 
 There is no test suite, and none should be added unless it is asked for.
 Verification here means running the real path against a production snapshot —

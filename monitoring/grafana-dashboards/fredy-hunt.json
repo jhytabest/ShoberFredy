@@ -19,6 +19,14 @@
     },
     {
       "description": "Every active advert this market's job has accepted, positioned by geocode and coloured by how far below (blue) or above (red) the model's fair price it asks.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-BlYlRd"
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -27,8 +35,9 @@
       },
       "options": {
         "basemap": {
-          "name": "",
-          "type": ""
+          "config": {},
+          "name": "OpenStreetMap",
+          "type": "default"
         },
         "controls": {
           "mouseWheelZoom": true,
@@ -42,7 +51,7 @@
               "style": {
                 "color": {
                   "field": "delta_percent",
-                  "fixed": "blue",
+                  "fixed": "#56B4E9",
                   "max": 30,
                   "min": -30
                 },
@@ -61,7 +70,7 @@
           }
         ],
         "tooltip": {
-          "mode": "none"
+          "mode": "details"
         },
         "view": {
           "allLayers": true,
@@ -169,7 +178,7 @@
             "uid": "fredy-sqlite"
           },
           "format": "table",
-          "queryText": "\n                        SELECT l.title AS title, l.link AS link, l.provider AS provider,\n                               l.price AS \"rent EUR\", l.size AS \"m2\",\n                               ROUND(l.price / l.size, 2) AS \"EUR/m2\",\n                               ROUND(s.fair_price_per_sqm, 2) AS \"fair EUR/m2\",\n                               ROUND(s.delta_percent, 1) AS \"delta %\",\n                               s.comps_500m AS comps,\n                               datetime(l.created_at / 1000, 'unixepoch') AS \"first seen\"\n                        \n    FROM listings l\n    JOIN homeserver_listing_model_scores s ON s.listing_id = l.id AND s.model_family = 'ridge'\n    WHERE l.state = 'active' AND l.market = '$market'\n\n                          AND \n    EXISTS (SELECT 1 FROM listing_verdicts v WHERE v.listing_id = l.id AND v.verdict = 'accepted')\n\n                        ORDER BY s.delta_percent ASC\n                        LIMIT 50\n                        ",
+          "queryText": "\n                        SELECT l.title AS title, l.link AS link, l.provider AS provider,\n                               l.price AS \"rent EUR\", l.size AS \"m2\",\n                               ROUND(l.price / l.size, 2) AS \"EUR/m2\",\n                               ROUND(s.fair_price_per_sqm, 2) AS \"fair EUR/m2\",\n                               ROUND(s.delta_percent, 1) AS \"delta %\",\n                               s.comps_500m AS comps,\n                               datetime(l.created_at / 1000, 'unixepoch') AS \"first seen\"\n                        \n    FROM listings l\n    JOIN homeserver_listing_model_scores s ON s.listing_id = l.id AND s.model_family = 'ridge'\n    WHERE l.state = 'active' AND l.market = '$market'\n\n                          AND \n    EXISTS (SELECT 1 FROM listing_verdicts v WHERE v.listing_id = l.id AND v.verdict = 'accepted')\n\n                          AND l.created_at BETWEEN ${__from} AND ${__to}\n                        ORDER BY s.delta_percent ASC\n                        LIMIT 50\n                        ",
           "refId": "A"
         }
       ],
@@ -215,7 +224,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 24
       },
@@ -239,7 +248,7 @@
             "uid": "fredy-sqlite"
           },
           "format": "time_series",
-          "queryText": "\n                        SELECT date(l.created_at / 1000, 'unixepoch') AS time,\n                               ROUND(AVG(l.price / l.size), 2) AS eur_per_sqm\n                        FROM listings l\n                        WHERE l.market = '$market' AND l.price > 0 AND l.size > 0\n                        GROUP BY 1\n                        ORDER BY 1\n                        ",
+          "queryText": "\n                        SELECT date(l.created_at / 1000, 'unixepoch') AS time,\n                               ROUND(AVG(l.price / l.size), 2) AS eur_per_sqm\n                        FROM listings l\n                        WHERE l.market = '$market' AND l.state = 'active' AND l.price > 0 AND l.size > 0\n                          AND l.created_at BETWEEN ${__from} AND ${__to}\n                        GROUP BY 1\n                        ORDER BY 1\n                        ",
           "refId": "A"
         }
       ],
@@ -265,26 +274,26 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "Which portal is actually producing for this market right now.",
+      "description": "Mean asking EUR/m2 in approximate 1 km coordinate cells, for currently active listings.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "#E69F00",
                 "value": null
               }
             ]
           },
-          "unit": "short"
+          "unit": "currencyEUR"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 24
       },
       "options": {
@@ -318,11 +327,90 @@
             "uid": "fredy-sqlite"
           },
           "format": "table",
-          "queryText": "\n                        SELECT l.provider AS provider, COUNT(*) AS new_listings\n                        FROM listings l\n                        WHERE l.market = '$market' AND l.created_at >= (strftime('%s','now') - 86400) * 1000\n                        GROUP BY 1\n                        ",
+          "queryText": "\n                        SELECT printf('%.2f, %.2f', ROUND(l.latitude, 2), ROUND(l.longitude, 2)) AS area,\n                               ROUND(AVG(l.price / l.size), 2) AS eur_per_sqm\n                        FROM listings l\n                        WHERE l.market = '$market' AND l.state = 'active'\n                          AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL\n                          AND l.price > 0 AND l.size > 0\n                        GROUP BY ROUND(l.latitude, 2), ROUND(l.longitude, 2)\n                        HAVING COUNT(*) >= 2\n                        ",
           "refId": "A"
         }
       ],
-      "title": "New arrivals, last 24h",
+      "title": "Price heat by area",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "eur_per_sqm"
+              }
+            ]
+          }
+        }
+      ],
+      "transparent": false,
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Which portal is actually producing for this market right now.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#56B4E9",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "fredy-sqlite"
+          },
+          "format": "table",
+          "queryText": "\n                        SELECT l.provider AS provider, COUNT(*) AS new_listings\n                        FROM listings l\n                        WHERE l.market = '$market' AND l.created_at >= strftime('%s','now','start of day') * 1000\n                        GROUP BY 1\n                        ",
+          "refId": "A"
+        }
+      ],
+      "title": "New arrivals today",
       "transformations": [
         {
           "id": "sortBy",
@@ -365,7 +453,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "orange",
+                "color": "#E69F00",
                 "value": null
               }
             ]
@@ -376,7 +464,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
+        "w": 4,
         "x": 0,
         "y": 33
       },
@@ -404,11 +492,71 @@
             "uid": "fredy-sqlite"
           },
           "format": "table",
-          "queryText": "\n                        SELECT CAST(\n                          (SELECT COUNT(*) FROM llm_call_audit WHERE started_at >= (strftime('%s','now') - 7*86400) * 1000)\n                          AS REAL\n                        ) / MAX(1, (\n                          SELECT COUNT(DISTINCT l.id) FROM listings l\n                          WHERE l.market = '$market' AND l.created_at >= (strftime('%s','now') - 7*86400) * 1000\n                            AND \n    EXISTS (SELECT 1 FROM listing_verdicts v WHERE v.listing_id = l.id AND v.verdict = 'accepted')\n\n                        )) AS calls_per_listing\n                        ",
+          "queryText": "\n                        SELECT CAST(\n                          (SELECT COUNT(*) FROM llm_call_audit a\n                           JOIN listings al ON al.id = a.listing_id\n                           WHERE al.market = '$market'\n                             AND a.started_at >= (strftime('%s','now') - 7*86400) * 1000)\n                          AS REAL\n                        ) / MAX(1, (\n                          SELECT COUNT(DISTINCT l.id) FROM listings l\n                          WHERE l.market = '$market' AND l.created_at >= (strftime('%s','now') - 7*86400) * 1000\n                            AND \n    EXISTS (SELECT 1 FROM listing_verdicts v WHERE v.listing_id = l.id AND v.verdict = 'accepted')\n\n                        )) AS calls_per_listing\n                        ",
           "refId": "A"
         }
       ],
       "title": "LLM calls per accepted listing",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "OpenRouter-reported cost over seven days, divided by accepted listings in this market.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#E69F00",
+                "value": null
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 33
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "fredy-sqlite"
+          },
+          "format": "table",
+          "queryText": "\n                        SELECT COALESCE((\n                          SELECT SUM(COALESCE(json_extract(a.usage_json, '$.cost'), 0))\n                          FROM llm_call_audit a\n                          JOIN listings al ON al.id = a.listing_id\n                          WHERE al.market = '$market'\n                            AND a.started_at >= (strftime('%s','now') - 7*86400) * 1000\n                        ), 0) / MAX(1, (\n                          SELECT COUNT(DISTINCT l.id) FROM listings l\n                          WHERE l.market = '$market' AND l.created_at >= (strftime('%s','now') - 7*86400) * 1000\n                            AND \n    EXISTS (SELECT 1 FROM listing_verdicts v WHERE v.listing_id = l.id AND v.verdict = 'accepted')\n\n                        )) AS usd_per_listing\n                        ",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM USD per accepted listing",
       "transparent": false,
       "type": "stat"
     },
@@ -443,8 +591,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 6,
+        "w": 4,
+        "x": 8,
         "y": 33
       },
       "options": {
@@ -471,7 +619,7 @@
             "uid": "fredy-sqlite"
           },
           "format": "table",
-          "queryText": "\n                        SELECT AVG(completed_at - started_at) AS latency_ms\n                        FROM llm_call_audit\n                        WHERE outcome = 'success' AND completed_at IS NOT NULL\n                          AND started_at >= (strftime('%s','now') - 86400) * 1000\n                        ",
+          "queryText": "\n                        WITH durations AS (\n                          SELECT completed_at - started_at AS latency_ms,\n                                 ROW_NUMBER() OVER (ORDER BY completed_at - started_at) AS position,\n                                 COUNT(*) OVER () AS total\n                          FROM llm_call_audit a\n                          JOIN listings l ON l.id = a.listing_id\n                          WHERE l.market = '$market' AND a.outcome = 'success' AND a.completed_at IS NOT NULL\n                            AND a.started_at >= (strftime('%s','now') - 86400) * 1000\n                        )\n                        SELECT AVG(latency_ms) AS latency_ms\n                        FROM durations\n                        WHERE position IN ((total + 1) / 2, (total + 2) / 2)\n                        ",
           "refId": "A"
         }
       ],
@@ -491,7 +639,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#009E73",
                 "value": null
               }
             ]
@@ -502,7 +650,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
+        "w": 4,
         "x": 12,
         "y": 33
       },
@@ -530,7 +678,7 @@
             "uid": "fredy-sqlite"
           },
           "format": "table",
-          "queryText": "SELECT count AS used FROM llm_budget_usage ORDER BY day DESC LIMIT 1",
+          "queryText": "SELECT COALESCE((SELECT count FROM llm_budget_usage WHERE day = strftime('%s','now','start of day') * 1000), 0) AS used",
           "refId": "A"
         }
       ],
@@ -570,8 +718,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 16,
         "y": 33
       },
       "options": {
@@ -603,6 +751,65 @@
         }
       ],
       "title": "Geocode cache hit rate",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "The denominator behind the cost row for the selected market.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#CC79A7",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 33
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "fredy-sqlite"
+          },
+          "format": "table",
+          "queryText": "\n                        SELECT COUNT(DISTINCT l.id) AS accepted\n                        FROM listings l\n                        WHERE l.market = '$market'\n                          AND l.created_at >= (strftime('%s','now') - 7*86400) * 1000\n                          AND \n    EXISTS (SELECT 1 FROM listing_verdicts v WHERE v.listing_id = l.id AND v.verdict = 'accepted')\n\n                        ",
+          "refId": "A"
+        }
+      ],
+      "title": "Accepted listings, 7d",
       "transparent": false,
       "type": "stat"
     }

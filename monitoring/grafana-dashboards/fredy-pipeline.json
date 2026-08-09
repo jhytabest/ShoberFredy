@@ -22,6 +22,91 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Global inventory metrics carry no market label, so this panel is explicitly independent of the market selector.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "fredy_market_cleaned_listings{scope=\"active_visible\"}",
+          "instant": true,
+          "legendFormat": "Active on market",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "expr": "fredy_market_new_listings{window=\"1d\"}",
+          "instant": true,
+          "legendFormat": "New 24h",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "expr": "fredy_market_new_listings{window=\"7d\"}",
+          "instant": true,
+          "legendFormat": "New 7d",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "expr": "fredy_market_price_cuts{window=\"7d\"}",
+          "instant": true,
+          "legendFormat": "Price cuts 7d",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "expr": "fredy_market_cleaned_listings{scope=\"all_training\"}",
+          "instant": true,
+          "legendFormat": "Trainable",
+          "range": false,
+          "refId": "E"
+        }
+      ],
+      "title": "Inventory (all markets)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "description": "Cumulative totals, across every job and market. Everything shed at the card stage is free; everything refused after extraction has already cost an LLM call.",
       "fieldConfig": {
         "defaults": {
@@ -29,7 +114,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "#56B4E9",
                 "value": null
               }
             ]
@@ -42,7 +127,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 1
+        "y": 5
       },
       "options": {
         "displayMode": "gradient",
@@ -134,7 +219,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "purple",
+                "color": "#CC79A7",
                 "value": null
               }
             ]
@@ -147,7 +232,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 1
+        "y": 5
       },
       "options": {
         "displayMode": "gradient",
@@ -212,7 +297,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "orange",
+                "color": "#E69F00",
                 "value": null
               }
             ]
@@ -225,7 +310,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 1
+        "y": 5
       },
       "options": {
         "displayMode": "gradient",
@@ -306,7 +391,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 13
       },
       "options": {
         "legend": {
@@ -360,7 +445,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 13
       },
       "options": {
         "legend": {
@@ -394,7 +479,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 21
       },
       "id": 0,
       "panels": [],
@@ -435,7 +520,7 @@
         "h": 5,
         "w": 4,
         "x": 0,
-        "y": 18
+        "y": 22
       },
       "options": {
         "colorMode": "value",
@@ -500,7 +585,7 @@
         "h": 5,
         "w": 4,
         "x": 4,
-        "y": 18
+        "y": 22
       },
       "options": {
         "colorMode": "value",
@@ -565,7 +650,7 @@
         "h": 5,
         "w": 4,
         "x": 8,
-        "y": 18
+        "y": 22
       },
       "options": {
         "colorMode": "value",
@@ -630,7 +715,7 @@
         "h": 5,
         "w": 4,
         "x": 12,
-        "y": 18
+        "y": 22
       },
       "options": {
         "colorMode": "value",
@@ -703,7 +788,7 @@
         "h": 5,
         "w": 4,
         "x": 16,
-        "y": 18
+        "y": 22
       },
       "options": {
         "colorMode": "value",
@@ -767,7 +852,7 @@
         "h": 5,
         "w": 4,
         "x": 20,
-        "y": 18
+        "y": 22
       },
       "options": {
         "colorMode": "value",
@@ -824,7 +909,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 27
       },
       "options": {
         "legend": {
@@ -864,7 +949,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#009E73",
                 "value": null
               }
             ]
@@ -877,7 +962,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 27
       },
       "options": {
         "displayMode": "gradient",

@@ -23,6 +23,9 @@ MARKET_SCOPED_METRICS = {
     "fredy_market_prediction_model_created_timestamp_seconds",
     "fredy_market_delta_distribution",
 }
+METRIC_NAMES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metric-names.txt")
+with open(METRIC_NAMES_PATH, encoding="utf-8") as metric_names_file:
+    ALLOWED_METRIC_NAMES = {line.strip() for line in metric_names_file if line.strip() and not line.startswith("#")}
 
 
 def build():
@@ -41,6 +44,23 @@ def build():
         )
         # ---------------------------------------------------------------- pipeline
         .with_row(dashboard_builder.Row("Pipeline (all markets)"))
+        .with_panel(
+            theme.plain_tile()
+            .title("Inventory (all markets)")
+            .description("Global inventory metrics carry no market label, so this panel is explicitly independent of the market selector.")
+            .span(24)
+            .unit("short")
+            .thresholds(theme.flat())
+            .targets(
+                [
+                    theme.query('fredy_market_cleaned_listings{scope="active_visible"}', "Active on market", True, "A"),
+                    theme.query('fredy_market_new_listings{window="1d"}', "New 24h", True, "B"),
+                    theme.query('fredy_market_new_listings{window="7d"}', "New 7d", True, "C"),
+                    theme.query('fredy_market_price_cuts{window="7d"}', "Price cuts 7d", True, "D"),
+                    theme.query('fredy_market_cleaned_listings{scope="all_training"}', "Trainable", True, "E"),
+                ]
+            )
+        )
         .with_panel(
             theme.ranking()
             .title("Discovery funnel")
@@ -272,4 +292,10 @@ def build():
     )
 
 
-theme.main(build, UID, OUTPUT, variable_scoped_metrics={"market": MARKET_SCOPED_METRICS})
+theme.main(
+    build,
+    UID,
+    OUTPUT,
+    allowed_metric_names=ALLOWED_METRIC_NAMES,
+    variable_scoped_metrics={"market": MARKET_SCOPED_METRICS},
+)

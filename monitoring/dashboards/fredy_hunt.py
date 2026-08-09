@@ -90,6 +90,7 @@ def build():
                                datetime(l.created_at / 1000, 'unixepoch') AS "first seen"
                         {ACTIVE_SCORED}
                           AND {ACCEPTED_EXISTS}
+                          AND l.created_at BETWEEN ${{__from}} AND ${{__to}}
                         ORDER BY s.delta_percent ASC
                         LIMIT 50
                         """,
@@ -116,7 +117,7 @@ def build():
             theme.trend()
             .title("Daily EUR per m2 (mean of active asks)")
             .description("The market's own asking-price trend, independent of the model.")
-            .span(12)
+            .span(8)
             .unit("currencyEUR")
             .decimals(1)
             .targets(
@@ -127,7 +128,8 @@ def build():
                         SELECT date(l.created_at / 1000, 'unixepoch') AS time,
                                ROUND(AVG(l.price / l.size), 2) AS eur_per_sqm
                         FROM listings l
-                        WHERE l.market = '$market' AND l.price > 0 AND l.size > 0
+                        WHERE l.market = '$market' AND l.state = 'active' AND l.price > 0 AND l.size > 0
+                          AND l.created_at BETWEEN ${__from} AND ${__to}
                         GROUP BY 1
                         ORDER BY 1
                         """,
@@ -139,9 +141,35 @@ def build():
         )
         .with_panel(
             theme.ranking()
-            .title("New arrivals, last 24h")
+            .title("Price heat by area")
+            .description("Mean asking EUR/m2 in approximate 1 km coordinate cells, for currently active listings.")
+            .span(8)
+            .unit("currencyEUR")
+            .thresholds(theme.flat(theme.palette_color(1)))
+            .targets(
+                [
+                    theme.sqlite(
+                        SQLITE_UID,
+                        """
+                        SELECT printf('%.2f, %.2f', ROUND(l.latitude, 2), ROUND(l.longitude, 2)) AS area,
+                               ROUND(AVG(l.price / l.size), 2) AS eur_per_sqm
+                        FROM listings l
+                        WHERE l.market = '$market' AND l.state = 'active'
+                          AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
+                          AND l.price > 0 AND l.size > 0
+                        GROUP BY ROUND(l.latitude, 2), ROUND(l.longitude, 2)
+                        HAVING COUNT(*) >= 2
+                        """,
+                    )
+                ]
+            )
+            .transformations([theme.sort_by("eur_per_sqm", desc=True)])
+        )
+        .with_panel(
+            theme.ranking()
+            .title("New arrivals today")
             .description("Which portal is actually producing for this market right now.")
-            .span(12)
+            .span(8)
             .unit("short")
             .thresholds(theme.flat(theme.palette_color(0)))
             .targets(
@@ -151,7 +179,7 @@ def build():
                         """
                         SELECT l.provider AS provider, COUNT(*) AS new_listings
                         FROM listings l
-                        WHERE l.market = '$market' AND l.created_at >= (strftime('%s','now') - 86400) * 1000
+                        WHERE l.market = '$market' AND l.created_at >= strftime('%s','now','start of day') * 1000
                         GROUP BY 1
                         """,
                     )
@@ -164,7 +192,7 @@ def build():
             theme.metric_tile()
             .title("LLM calls per accepted listing")
             .description("Extraction cost, framed by what it bought: how many model calls each accepted advert took.")
-            .span(6)
+            .span(4)
             .height(5)
             .unit("short")
             .decimals(1)
@@ -175,7 +203,10 @@ def build():
                         SQLITE_UID,
                         f"""
                         SELECT CAST(
-                          (SELECT COUNT(*) FROM llm_call_audit WHERE started_at >= (strftime('%s','now') - 7*86400) * 1000)
+                          (SELECT COUNT(*) FROM llm_call_audit a
+                           JOIN listings al ON al.id = a.listing_id
+                           WHERE al.market = '$market'
+                             AND a.started_at >= (strftime('%s','now') - 7*86400) * 1000)
                           AS REAL
                         ) / MAX(1, (
                           SELECT COUNT(DISTINCT l.id) FROM listings l
@@ -189,9 +220,39 @@ def build():
         )
         .with_panel(
             theme.metric_tile()
+            .title("LLM USD per accepted listing")
+            .description("OpenRouter-reported cost over seven days, divided by accepted listings in this market.")
+            .span(4)
+            .height(5)
+            .unit("currencyUSD")
+            .decimals(3)
+            .thresholds(theme.flat(theme.palette_color(1)))
+            .targets(
+                [
+                    theme.sqlite(
+                        SQLITE_UID,
+                        f"""
+                        SELECT COALESCE((
+                          SELECT SUM(COALESCE(json_extract(a.usage_json, '$.cost'), 0))
+                          FROM llm_call_audit a
+                          JOIN listings al ON al.id = a.listing_id
+                          WHERE al.market = '$market'
+                            AND a.started_at >= (strftime('%s','now') - 7*86400) * 1000
+                        ), 0) / MAX(1, (
+                          SELECT COUNT(DISTINCT l.id) FROM listings l
+                          WHERE l.market = '$market' AND l.created_at >= (strftime('%s','now') - 7*86400) * 1000
+                            AND {ACCEPTED_EXISTS}
+                        )) AS usd_per_listing
+                        """,
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.metric_tile()
             .title("Median LLM latency")
             .description("From llm_call_audit.started_at/completed_at. Not cost, but the other half of what an extraction takes.")
-            .span(6)
+            .span(4)
             .height(5)
             .unit("ms")
             .thresholds(theme.bad_above(8000, 20000))
@@ -200,10 +261,18 @@ def build():
                     theme.sqlite(
                         SQLITE_UID,
                         """
-                        SELECT AVG(completed_at - started_at) AS latency_ms
-                        FROM llm_call_audit
-                        WHERE outcome = 'success' AND completed_at IS NOT NULL
-                          AND started_at >= (strftime('%s','now') - 86400) * 1000
+                        WITH durations AS (
+                          SELECT completed_at - started_at AS latency_ms,
+                                 ROW_NUMBER() OVER (ORDER BY completed_at - started_at) AS position,
+                                 COUNT(*) OVER () AS total
+                          FROM llm_call_audit a
+                          JOIN listings l ON l.id = a.listing_id
+                          WHERE l.market = '$market' AND a.outcome = 'success' AND a.completed_at IS NOT NULL
+                            AND a.started_at >= (strftime('%s','now') - 86400) * 1000
+                        )
+                        SELECT AVG(latency_ms) AS latency_ms
+                        FROM durations
+                        WHERE position IN ((total + 1) / 2, (total + 2) / 2)
                         """,
                     )
                 ]
@@ -213,7 +282,7 @@ def build():
             theme.metric_tile()
             .title("LLM budget used today")
             .description("Requests spent of the daily budget, from llm_budget_usage — the ceiling, not the bill.")
-            .span(6)
+            .span(4)
             .height(5)
             .unit("short")
             .thresholds(theme.flat(theme.palette_color(2)))
@@ -221,7 +290,7 @@ def build():
                 [
                     theme.sqlite(
                         SQLITE_UID,
-                        "SELECT count AS used FROM llm_budget_usage ORDER BY day DESC LIMIT 1",
+                        "SELECT COALESCE((SELECT count FROM llm_budget_usage WHERE day = strftime('%s','now','start of day') * 1000), 0) AS used",
                     )
                 ]
             )
@@ -230,7 +299,7 @@ def build():
             theme.metric_tile()
             .title("Geocode cache hit rate")
             .description("Share of cached addresses resolved on the first attempt, from homeserver_geocode_cache.")
-            .span(6)
+            .span(4)
             .height(5)
             .unit("percentunit")
             .decimals(2)
@@ -243,6 +312,29 @@ def build():
                         SELECT CAST(SUM(CASE WHEN status = 'ok' AND attempts = 1 THEN 1 ELSE 0 END) AS REAL)
                                / MAX(1, COUNT(*)) AS hit_rate
                         FROM homeserver_geocode_cache
+                        """,
+                    )
+                ]
+            )
+        )
+        .with_panel(
+            theme.metric_tile()
+            .title("Accepted listings, 7d")
+            .description("The denominator behind the cost row for the selected market.")
+            .span(4)
+            .height(5)
+            .unit("short")
+            .thresholds(theme.flat(theme.palette_color(3)))
+            .targets(
+                [
+                    theme.sqlite(
+                        SQLITE_UID,
+                        f"""
+                        SELECT COUNT(DISTINCT l.id) AS accepted
+                        FROM listings l
+                        WHERE l.market = '$market'
+                          AND l.created_at >= (strftime('%s','now') - 7*86400) * 1000
+                          AND {ACCEPTED_EXISTS}
                         """,
                     )
                 ]

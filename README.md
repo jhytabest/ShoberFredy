@@ -377,19 +377,23 @@ yarn format:check
 yarn lint
 ```
 
-The Grafana dashboard in `monitoring/grafana-dashboard.json` is generated, not
-edited. `monitoring/dashboards/build` produces it from the Grafana Foundation
-SDK, and `theme.py` beside it holds the shared panel styling:
+The two dashboards this repo owns — `fredy-hunt` (does the search work: a map
+of active listings, best-priced deals, market trend, what it costs to run)
+and `fredy-pipeline` (is the machinery working: funnel, refusals, model
+quality) — live under `monitoring/grafana-dashboards/`, generated, not edited.
+`monitoring/dashboards/build` runs both generator scripts through the Grafana
+Foundation SDK and the shared [`homeserver-grafana-theme`](https://github.com/jhytabest/homeserver-grafana-theme)
+package, pinned in `monitoring/dashboards/requirements.txt`:
 
 ```bash
 yarn dashboard:setup
 yarn dashboard:build
 ```
 
-`theme.py` is duplicated in the homeserver repository on purpose. The two
-repositories release independently and neither may depend on the other, and
-publishing a package for seventy lines serving two dashboards would cost more
-than the duplication does.
+The theme package is the same one the homeserver repo pins in
+`infra/ansible/host_vars/versions.yml`. It used to be a `theme.py` file
+copied verbatim into both repos; a pinned package can't drift the way two
+copies of the same file eventually do.
 
 The SDK version is pinned and Renovate is constrained to the 11.6 line. Its
 version strings are `<build-epoch>!<grafana-minor>`, and within one publishing

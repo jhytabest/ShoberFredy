@@ -65,7 +65,8 @@ jobs:
           python3 -m venv .dashboard-venv
           .dashboard-venv/bin/pip install --disable-pip-version-check -r monitoring/dashboards/requirements.txt
           .dashboard-venv/bin/python3 monitoring/dashboards/build --check
-          jq empty monitoring/grafana-dashboard.json
+          jq empty monitoring/grafana-dashboards/fredy-hunt.json
+          jq empty monitoring/grafana-dashboards/fredy-pipeline.json
 
 
   build-and-push-image:

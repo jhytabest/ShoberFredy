@@ -14,7 +14,7 @@
       },
       "id": 0,
       "panels": [],
-      "title": "Pipeline",
+      "title": "Pipeline (all markets)",
       "type": "row"
     },
     {
@@ -22,7 +22,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "Cumulative totals. Everything shed at the card stage is free; everything refused after extraction has already cost an LLM call.",
+      "description": "Cumulative totals, across every job and market. Everything shed at the card stage is free; everything refused after extraction has already cost an LLM call.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -106,6 +106,19 @@
         }
       ],
       "title": "Discovery funnel",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "Value"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": false,
       "type": "bargauge"
     },
@@ -170,6 +183,19 @@
         }
       ],
       "title": "Refusals by reason",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "Value"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": false,
       "type": "bargauge"
     },
@@ -235,6 +261,19 @@
         }
       ],
       "title": "Refusals by term",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "Value"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": false,
       "type": "bargauge"
     },
@@ -350,102 +389,12 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "Daily intake per portal. A provider going quiet is visible here first.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "opacity",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 17
-      },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "expr": "fredy_market_daily_listings_by_provider",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "New listings by provider",
-      "transformations": [
-        {
-          "id": "convertFieldType",
-          "options": {
-            "conversions": [
-              {
-                "destinationType": "time",
-                "targetField": "date"
-              }
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "app": true,
-              "instance": true,
-              "job": true
-            },
-            "indexByName": {},
-            "renameByName": {}
-          }
-        },
-        {
-          "id": "partitionByValues",
-          "options": {
-            "fields": [
-              "provider"
-            ],
-            "keepFields": false
-          }
-        }
-      ],
-      "transparent": false,
-      "type": "timeseries"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 17
       },
       "id": 0,
       "panels": [],
@@ -486,7 +435,7 @@
         "h": 5,
         "w": 4,
         "x": 0,
-        "y": 26
+        "y": 18
       },
       "options": {
         "colorMode": "value",
@@ -551,7 +500,7 @@
         "h": 5,
         "w": 4,
         "x": 4,
-        "y": 26
+        "y": 18
       },
       "options": {
         "colorMode": "value",
@@ -616,7 +565,7 @@
         "h": 5,
         "w": 4,
         "x": 8,
-        "y": 26
+        "y": 18
       },
       "options": {
         "colorMode": "value",
@@ -681,7 +630,7 @@
         "h": 5,
         "w": 4,
         "x": 12,
-        "y": 26
+        "y": 18
       },
       "options": {
         "colorMode": "value",
@@ -702,7 +651,7 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "expr": "fredy_market_model_interval{model=\"$model\",stat=\"width_percent\"}",
+          "expr": "fredy_market_model_interval{model=\"$model\",market=\"$market\",stat=\"width_percent\"}",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -754,7 +703,7 @@
         "h": 5,
         "w": 4,
         "x": 16,
-        "y": 26
+        "y": 18
       },
       "options": {
         "colorMode": "value",
@@ -775,7 +724,7 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "expr": "100 * (fredy_market_model_interval{model=\"$model\",stat=\"coverage\"} - ignoring(stat) fredy_market_model_interval{model=\"$model\",stat=\"level\"})",
+          "expr": "100 * (fredy_market_model_interval{model=\"$model\",market=\"$market\",stat=\"coverage\"} - ignoring(stat) fredy_market_model_interval{model=\"$model\",market=\"$market\",stat=\"level\"})",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -818,7 +767,7 @@
         "h": 5,
         "w": 4,
         "x": 20,
-        "y": 26
+        "y": 18
       },
       "options": {
         "colorMode": "value",
@@ -875,7 +824,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 23
       },
       "options": {
         "legend": {
@@ -908,7 +857,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "How far asks sit from the model's fair price. A wide spread here is the model's uncertainty, not a market signal.",
+      "description": "How far asks sit from the model's fair price. A wide spread here is the model's uncertainty, not a market signal. Ordered by price bucket, not alphabetically by label.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -928,7 +877,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 23
       },
       "options": {
         "displayMode": "gradient",
@@ -964,358 +913,28 @@
         }
       ],
       "title": "Mispricing distribution",
-      "transparent": false,
-      "type": "bargauge"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 39
-      },
-      "id": 0,
-      "panels": [],
-      "title": "Listings",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "What is on the market now, what arrived recently, and how much of the corpus is unusable.",
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 40
-      },
-      "options": {
-        "colorMode": "none",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "value_and_name",
-        "wideLayout": true
-      },
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "expr": "fredy_market_cleaned_listings{scope=\"active_visible\"}",
-          "instant": true,
-          "legendFormat": "Active on market",
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "expr": "fredy_market_new_listings{window=\"1d\"}",
-          "instant": true,
-          "legendFormat": "New 24h",
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "expr": "fredy_market_new_listings{window=\"7d\"}",
-          "instant": true,
-          "legendFormat": "New 7d",
-          "range": false,
-          "refId": "C"
-        },
-        {
-          "expr": "fredy_market_price_cuts{window=\"7d\"}",
-          "instant": true,
-          "legendFormat": "Price cuts 7d",
-          "range": false,
-          "refId": "D"
-        },
-        {
-          "expr": "fredy_market_cleaned_listings{scope=\"all_training\"}",
-          "instant": true,
-          "legendFormat": "Trainable",
-          "range": false,
-          "refId": "E"
-        }
-      ],
-      "title": "Inventory",
-      "transparent": false,
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "Ranked by distance below the model's fair price. Titles link to the advert.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "title"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "Open advert",
-                    "url": "${__data.fields.link}"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "link"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "delta %"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "save EUR/mo"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyEUR"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 44
-      },
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "reducer": [],
-          "show": false
-        },
-        "frameIndex": 0,
-        "showHeader": true,
-        "showTypeIcons": false
-      },
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "expr": "fredy_market_top_listing{model=\"$model\",market=\"$market\",window=\"7d\"}",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Best priced now",
       "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "app": true,
-              "instance": true,
-              "job": true,
-              "listing_id": true,
-              "model": true,
-              "window": true,
-              "z_score": true
-            },
-            "indexByName": {
-              "Value": 9,
-              "area": 2,
-              "confidence": 12,
-              "fair_per_sqm": 7,
-              "first_seen": 11,
-              "link": 13,
-              "price_eur": 5,
-              "price_per_sqm": 6,
-              "provider": 10,
-              "rank": 0,
-              "rooms": 3,
-              "saving_eur_per_month": 8,
-              "size_sqm": 4,
-              "title": 1
-            },
-            "renameByName": {
-              "Value": "delta %",
-              "confidence": "conf",
-              "fair_per_sqm": "fair EUR/m2",
-              "first_seen": "first seen",
-              "price_eur": "rent EUR",
-              "price_per_sqm": "EUR/m2",
-              "saving_eur_per_month": "save EUR/mo",
-              "size_sqm": "m2"
-            }
-          }
-        },
         {
           "id": "sortBy",
           "options": {
             "sort": [
               {
-                "field": "rank"
+                "desc": false,
+                "field": "order"
               }
             ]
           }
         }
       ],
       "transparent": false,
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "Quartiles of the asking price per square metre across the whole corpus.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "opacity",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "decimals": 1,
-          "unit": "currencyEUR"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 54
-      },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "expr": "fredy_market_daily_price_per_sqm{market=\"$market\"}",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Daily EUR per m2",
-      "transformations": [
-        {
-          "id": "convertFieldType",
-          "options": {
-            "conversions": [
-              {
-                "destinationType": "time",
-                "targetField": "date"
-              }
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "app": true,
-              "instance": true,
-              "job": true
-            },
-            "indexByName": {},
-            "renameByName": {}
-          }
-        },
-        {
-          "id": "partitionByValues",
-          "options": {
-            "fields": [
-              "quantile"
-            ],
-            "keepFields": false
-          }
-        }
-      ],
-      "transparent": false,
-      "type": "timeseries"
+      "type": "bargauge"
     }
   ],
   "refresh": "1m",
   "schemaVersion": 41,
   "tags": [
     "fredy",
-    "market",
+    "pipeline",
     "generated"
   ],
   "templating": {
@@ -1359,6 +978,6 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Fredy Market",
-  "uid": "fredy-market"
+  "title": "Fredy Pipeline",
+  "uid": "fredy-pipeline"
 }

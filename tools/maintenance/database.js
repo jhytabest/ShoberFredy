@@ -20,7 +20,6 @@ const USAGE = `Usage:
 ${JOBS_USAGE}
 
 Values are JSON, so quote strings:
-  yarn maintenance settings set proxyUrl '"http://user:pass@host:port"'
   yarn maintenance jobs set <id> blacklist '["Tausch","Untermiete"]'
 `;
 

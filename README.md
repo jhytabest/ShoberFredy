@@ -26,7 +26,7 @@ lives at exactly one of them:
 
 | Level              | Holds                                                                                                             | Configurable?      |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| **Deployment**      | secrets, kill switches, timeouts, and every other tuning knob (`env`); `proxyUrl`, mutable at runtime (`settings`); `sqlitepath` (`config.json`) | yes                 |
+| **Deployment**      | secrets, proxy URL, kill switches, timeouts, and every other tuning knob (`env`); `sqlitepath` (`config.json`) | yes                 |
 | **Portal adapter**  | how to read one site: selectors, `normalize`, `captureDetails`, pagination                                        | no — code only      |
 | **Job**             | everything about one search: city, cadence, filters, providers, notification | yes                 |
 
@@ -352,6 +352,7 @@ not generated from it; keep the two in sync when the registry changes.
 | `CLOAKBROWSER_BINARY_PATH`        | _unset_       | Explicit CloakBrowser Chromium path.                            |
 | `CLOAKBROWSER_CACHE_DIR`          | _unset_       | CloakBrowser download cache directory.                          |
 | `FREDY_DOCKER`                    | `false`       | Set by the container image to signal a Docker deployment.       |
+| `FREDY_PROXY_URL`                 | _unset_       | HTTP proxy used when reachable; unavailable proxies are bypassed. |
 | `MIGRATION_ALLOW_CHECKSUM_UPDATE` | `false`       | Permit rewriting the recorded checksum of an applied migration. |
 | `NODE_ENV`                        | `development` | Node environment; "production" quiets debug logging.            |
 
@@ -439,13 +440,9 @@ state, claim coverage, audit relationships, and full-text coverage. Dedupe,
 payload compaction, orphan-media cleanup, terminal work-row pruning, and optional
 vacuuming have no manual mutation path.
 
-`settings` is the only write path into the `settings` table, which is where
-`proxyUrl` lives. Values are JSON, so strings need quotes:
-
-```bash
-yarn maintenance settings set proxyUrl '"socks5://user:pass@host:port"'
-yarn maintenance settings unset proxyUrl
-```
+`settings` remains the only write path into the legacy `settings` table. The
+application no longer reads proxy configuration from it; use
+`FREDY_PROXY_URL` instead.
 
 `jobs` is the only write path into the `jobs` table. Every document is validated
 before it is stored — provider ids against the loaded providers, intent codes
@@ -502,21 +499,22 @@ first pass after a long gap can remove a great deal at once.
 ## Provider notes
 
 ImmoScout uses its mobile API. The other providers use CloakBrowser. On a
-datacenter host, a German residential proxy may be needed; store it in the
-`proxyUrl` application setting (`yarn maintenance settings set proxyUrl '"..."'`).
-Supported formats include:
+datacenter host, a German residential proxy may be needed; configure its HTTP
+URL with `FREDY_PROXY_URL`, for example:
 
 ```text
-http://user:pass@host:port
-socks5://user:pass@host:port
+http://host:port
 ```
 
-Leave the setting empty to connect directly.
+Leave the variable empty to connect directly. Fredy checks the proxy with an
+HTTP CONNECT probe and uses it globally only while it is reachable; changing
+the variable requires a container restart.
 
 Immowelt declares `requiresProxy` in its provider metadata, so it is the one
 provider that will not run without one: on a bare datacenter IP it answers every
 search with an HTTP 403 bot challenge and no cards, which is indistinguishable
 from changed markup and drives the circuit breaker to its six-hour ceiling.
-While `proxyUrl` is empty, discovery skips Immowelt and already-queued Immowelt
-detail captures wait rather than spending their failure budget. Filling the
-setting in resumes both on the next run — no restart, no queue surgery.
+While the configured proxy is unreachable, discovery skips Immowelt and
+already-queued Immowelt detail captures wait rather than spending their failure
+budget. Both resume automatically after the proxy recovers, while providers
+that do not require it continue directly.

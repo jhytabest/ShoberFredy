@@ -56,6 +56,12 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      # node:test, so there is nothing to install for it. Covers the session lock
+      # and the deadline's abort plumbing — the two places where a regression is
+      # invisible until the scrapers quietly stop.
+      - name: Test
+        run: yarn test
+
   build-and-push-image:
     needs: quality
     runs-on: ubuntu-latest

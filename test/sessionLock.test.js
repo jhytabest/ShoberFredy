@@ -42,7 +42,9 @@ test('a holder that throws still frees the lock', async () => {
 
 // The production failure: an operation that never settled kept the lock forever,
 // so discovery, detail capture and liveness all queued behind it until restart.
-test('waiting is bounded, and a caller that gives up does not become the blockage', async () => {
+// Every waiter must now give up on its own schedule — while still not being handed
+// a lock the stuck holder has not let go of.
+test('every waiter fails fast while the holder keeps the lock', async () => {
   const lock = createSessionLock();
 
   const stuck = await lock.acquire(1000);
@@ -50,11 +52,12 @@ test('waiting is bounded, and a caller that gives up does not become the blockag
 
   await assert.rejects(() => lock.acquire(25), LockBusyError);
 
-  // The point of the test: the *second* waiter must also fail fast rather than
-  // queue behind the first waiter's abandoned link.
+  // The second waiter is the interesting one. It must not sail through on the
+  // first waiter's abandoned link — that would hand it a browser the stuck holder
+  // is still using — and it must not wait unbounded either.
   const startedAt = Date.now();
   await assert.rejects(() => lock.acquire(25), LockBusyError);
-  assert.ok(Date.now() - startedAt < 500, 'second waiter should fail fast, not inherit a dead link');
+  assert.ok(Date.now() - startedAt < 500, 'second waiter should fail fast, not wait unbounded');
 
   stuck();
 });

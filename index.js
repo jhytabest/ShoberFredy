@@ -4,11 +4,12 @@
  */
 
 import fs from 'fs';
+import sharp from 'sharp';
 import { checkIfConfigIsAccessible, getProviders, refreshConfig } from './lib/utils.js';
 import { runMigrations } from './lib/services/storage/migrations/migrate.js';
 import logger from './lib/services/logger.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
-import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
+import { SCHEDULER_WORKER, initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
 import { startHealthServer } from './lib/health/healthServer.js';
 import { startMetricsExporterProcess } from './lib/services/market/metricsExporterSupervisor.js';
@@ -25,6 +26,14 @@ import { env } from './lib/shared/env.js';
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
 }
+
+// libvips defaults are sized for a machine that exists to process images: a
+// cache measured in hundreds of megabytes and one worker thread per core. This
+// process resizes a handful of listing photos between long idle stretches on a
+// 3.7 GiB host, and the cache is never warm when it matters — it only ratchets
+// RSS up and never gives it back. One thread, no cache.
+sharp.cache(false);
+sharp.concurrency(1);
 
 logger.info('Checking CloakBrowser binary...');
 await ensureValidBinary();
@@ -78,6 +87,7 @@ const startedWorkers = [
   startNotificationDispatcher(),
   marketModelWorker,
 ];
-expectWorkers(startedWorkers.filter(Boolean));
-
 initJobExecutionService({ providers });
+
+// After initJobExecutionService, which is what registers the scheduler.
+expectWorkers([...startedWorkers.filter(Boolean), SCHEDULER_WORKER]);

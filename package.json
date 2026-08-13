@@ -10,6 +10,7 @@
     "format:check": "prettier --check \"**/*.js\"",
     "lint": "eslint .",
     "lint:fix": "yarn lint --fix",
+    "test": "node --test test/*.test.js",
     "migratedb": "node lib/services/storage/migrations/migrate.js",
     "market:setup": "python3 -m venv .market-venv && .market-venv/bin/pip install --disable-pip-version-check -r tools/market/requirements.txt",
     "market:exporter": "node tools/market/marketExporter.js",

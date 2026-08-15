@@ -21,10 +21,18 @@ import { startRatingWorker } from './lib/services/pipeline/ratingQueue.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
 import { startMaintenanceWorker } from './lib/services/pipeline/maintenanceWorker.js';
 import { expectWorkers } from './lib/services/pipeline/workerSupervisor.js';
-import { env } from './lib/shared/env.js';
+import { env, timeoutOrderingProblems } from './lib/shared/env.js';
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
+}
+
+// Before anything opens a browser: an inverted timeout ordering does not fail,
+// it misreports, and every symptom it produces points at the provider instead.
+const timeoutProblems = timeoutOrderingProblems();
+if (timeoutProblems.length) {
+  for (const problem of timeoutProblems) logger.error(problem);
+  process.exit(1);
 }
 
 // libvips defaults are sized for a machine that exists to process images: a

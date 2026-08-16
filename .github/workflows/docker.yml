@@ -1,17 +1,18 @@
 name: Build and publish Docker image
 
-# Builds ghcr.io/jhytabest/shoberfredy on every pull request and every master
-# push (and tags). Only master pushes and tags publish.
+# Builds ghcr.io/jhytabest/shoberfredy on every pull request and default-branch
+# push (and tags). The temporary master entry keeps CI continuous while the
+# repository default branch is renamed to main.
 #
 # The build runs on pull requests because it is the only check that can fail for
 # a reason lint cannot see, and because Renovate automerges on a green check set.
-# When this ran on master alone, `numpy==2.5.1` sailed through review and merged:
+# When this ran on the default branch alone, `numpy==2.5.1` sailed through review and merged:
 # it needs Python 3.12 and the base image ships 3.11, so master's image stopped
 # building, no new digest was published, and the homeserver — which pins a digest
 # — simply stopped receiving updates with nothing failing in front of anyone.
 #
 # Deployment to the homeserver stays in the homeserver repo, where Renovate
-# advances the published master digest through the normal release path.
+# advances the published main digest through the normal release path.
 #
 # Every third-party action is pinned to a commit SHA, not a tag. CloakBrowser
 # is lockfile-pinned too and updated by Renovate, so every image is reproducible.
@@ -19,9 +20,11 @@ name: Build and publish Docker image
 on:
   pull_request:
     branches:
+      - 'main'
       - 'master'
   push:
     branches:
+      - 'main'
       - 'master'
     tags:
       - '*'
@@ -98,7 +101,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=ref,event=pr
-            type=raw,value=master,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
       # Homeserver is a single amd64 box; skipping arm64 halves build time.
       - name: Build Docker image for verification

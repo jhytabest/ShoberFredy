@@ -209,7 +209,7 @@ docker run -d --name shoberfredy \
   -v shoberfredy_conf:/conf \
   -v shoberfredy_db:/db \
   -p 9998:9998 \
-  ghcr.io/jhytabest/shoberfredy:master
+  ghcr.io/jhytabest/shoberfredy:main
 ```
 
 The only HTTP surface is the health endpoint, on `FREDY_HEALTH_PORT` (default

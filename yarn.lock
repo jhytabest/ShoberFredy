@@ -1339,17 +1339,17 @@ punycode@^2.1.0:
   resolved "https://registry.yarnpkg.com/punycode/-/punycode-2.3.1.tgz#027422e2faec0b25e1549c3e1bd8309b9133b6e5"
   integrity sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==
 
-puppeteer-core@^25.8.0:
-  version "25.8.0"
-  resolved "https://registry.yarnpkg.com/puppeteer-core/-/puppeteer-core-25.8.0.tgz#ca64b005aa21732ca8f5f3f98379739114ae09c5"
-  integrity sha512-LDOrawV8vfCVk+yLj2ozvajNP4Sv3OV9y3Tpiyy2g2Z+aQlbcozP6KJfI4iSBq7YQER+86ihEtPa5ioiZyWxMQ==
+puppeteer-core@^25.9.0:
+  version "25.9.0"
+  resolved "https://registry.yarnpkg.com/puppeteer-core/-/puppeteer-core-25.9.0.tgz#257a2ca22ce4a56b3c3045543468cd4a52aa0003"
+  integrity sha512-U61rCwSMha62CA/Opy6tCx2Fx+ck7ouiKnbpEApzSoLYMoEu9F71nuFpHL55vmIt33/GYm6eKZVhH2ev0nAIeg==
   dependencies:
     "@puppeteer/browsers" "3.2.1"
     chromium-bidi "17.0.2"
     devtools-protocol "0.0.1666840"
     typed-query-selector "^2.12.2"
     webdriver-bidi-protocol "0.4.2"
-    ws "^8.21.1"
+    ws "^8.21.3"
 
 query-string@9.5.0:
   version "9.5.0"
@@ -1663,10 +1663,10 @@ wrap-ansi@^9.0.0:
     string-width "^7.0.0"
     strip-ansi "^7.1.0"
 
-ws@^8.21.1:
-  version "8.21.1"
-  resolved "https://registry.yarnpkg.com/ws/-/ws-8.21.1.tgz#045650cd4b1207809e7547146223c3814a9af586"
-  integrity sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==
+ws@^8.21.3:
+  version "8.21.3"
+  resolved "https://registry.yarnpkg.com/ws/-/ws-8.21.3.tgz#660b4faddb6a3e575c86e078126919961f4de4fc"
+  integrity sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==
 
 y18n@^5.0.5:
   version "5.0.8"

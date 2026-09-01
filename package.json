@@ -60,7 +60,7 @@
     "node-fetch": "3.3.2",
     "p-throttle": "^8.1.0",
     "puppeteer-core": "^25.9.0",
-    "query-string": "9.5.0",
+    "query-string": "9.5.1",
     "sharp": "^0.35.4"
   },
   "devDependencies": {

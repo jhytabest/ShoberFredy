@@ -25,7 +25,7 @@ lives at exactly one of them:
 
 | Level              | Holds                                                                                                             | Configurable?      |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| **Deployment**      | secrets, proxy URL, kill switches, timeouts, and every other tuning knob (`env`); `sqlitepath` (`config.json`) | yes                 |
+| **Deployment**      | secrets, kill switches, timeouts, and every other tuning knob (`env`); `sqlitepath` (`config.json`) | yes                 |
 | **Portal adapter**  | how to read one site: selectors, `normalize`, `captureDetails`, pagination                                        | no — code only      |
 | **Job**             | everything about one search: city, cadence, filters, providers, notification | yes                 |
 
@@ -179,8 +179,9 @@ a constrained column means rebuilding the table.
 - Source observations and LLM calls retain hashes, byte counts, outcomes, and
   timing rather than duplicating raw pages, prompts, or responses.
 - Source URLs, filter decisions, processing attempts, merges, and notification
-  results remain auditable. Historical scoring audit events from deployments
-  predating price-model removal are preserved as immutable history.
+  results remain auditable. Scoring audit events and queue rows left behind by
+  the retired price model are not history worth keeping, and a deployment that
+  still carries them can delete them.
 - There is no backfill or repair pipeline. Terminal work payloads are compacted
   automatically after their durable result is attached.
 
@@ -324,7 +325,6 @@ not generated from it; keep the two in sync when the registry changes.
 | `CLOAKBROWSER_BINARY_PATH`        | _unset_       | Explicit CloakBrowser Chromium path.                            |
 | `CLOAKBROWSER_CACHE_DIR`          | _unset_       | CloakBrowser download cache directory.                          |
 | `FREDY_DOCKER`                    | `false`       | Set by the container image to signal a Docker deployment.       |
-| `FREDY_PROXY_URL`                 | _unset_       | HTTP proxy used when reachable; unavailable proxies are bypassed. |
 | `MIGRATION_ALLOW_CHECKSUM_UPDATE` | `false`       | Permit rewriting the recorded checksum of an applied migration. |
 | `NODE_ENV`                        | `development` | Node environment; "production" quiets debug logging.            |
 
@@ -401,9 +401,9 @@ state, claim coverage, audit relationships, and full-text coverage. Dedupe,
 payload compaction, orphan-media cleanup, terminal work-row pruning, and optional
 vacuuming have no manual mutation path.
 
-`settings` remains the only write path into the legacy `settings` table. The
-application no longer reads proxy configuration from it; use
-`FREDY_PROXY_URL` instead.
+`settings` remains the only write path into the legacy `settings` table. No
+part of the application reads proxy configuration any more, from it or from
+anywhere else.
 
 `jobs` is the only write path into the `jobs` table. Every document is validated
 before it is stored — provider ids against the loaded providers, intent codes
@@ -459,23 +459,13 @@ first pass after a long gap can remove a great deal at once.
 
 ## Provider notes
 
-ImmoScout uses its mobile API. The other providers use CloakBrowser. On a
-datacenter host, a German residential proxy may be needed; configure its HTTP
-URL with `FREDY_PROXY_URL`, for example:
+ImmoScout uses its mobile API. The other providers use CloakBrowser. Every
+provider connects directly: Fredy has no proxy setting and no provider waits on
+one, because routing egress is the host's job — a VPN or exit node in front of
+the container is invisible to the application and needs no configuration in it.
 
-```text
-http://host:port
-```
-
-Leave the variable empty to connect directly. Fredy checks the proxy with an
-HTTP CONNECT probe and uses it globally only while it is reachable; changing
-the variable requires a container restart.
-
-Immowelt declares `requiresProxy` in its provider metadata, so it is the one
-provider that will not run without one: on a bare datacenter IP it answers every
-search with an HTTP 403 bot challenge and no cards, which is indistinguishable
-from changed markup and drives the circuit breaker to its six-hour ceiling.
-While the configured proxy is unreachable, discovery skips Immowelt and
-already-queued Immowelt detail captures wait rather than spending their failure
-budget. Both resume automatically after the proxy recovers, while providers
-that do not require it continue directly.
+Immowelt is the provider most sensitive to where the traffic comes from. From an
+address a portal dislikes it answers searches with an HTTP 403 bot challenge and
+no cards, which is indistinguishable from changed markup and drives the circuit
+breaker to its six-hour ceiling. If that happens, route the container's egress
+somewhere friendlier rather than looking for a setting here.

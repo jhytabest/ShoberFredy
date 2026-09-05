@@ -1,5 +1,0 @@
-# Newest, with nothing standing in the way: the image is node:24-trixie-slim
-# (Debian 13, Python 3.13), so numpy's Requires-Python >=3.12 is satisfied and
-# Renovate needs no interpreter constraint to avoid proposing the impossible.
-numpy==2.5.2
-lightgbm==4.7.0

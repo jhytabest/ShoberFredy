@@ -128,8 +128,6 @@ jobs:
           image=$(head -n1 <<< "$IMAGE_TAGS")
           container=$(docker run --detach \
             --env GOOGLE_GEOCODING_API_KEY=smoke-test-placeholder \
-            --env FREDY_MARKET_EXPORTER_PORT=0 \
-            --env FREDY_MARKET_MODEL_CRON=0 \
             "$image")
           trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
           for _ in $(seq 1 60); do

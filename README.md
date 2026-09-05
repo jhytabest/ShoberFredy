@@ -4,13 +4,12 @@ Shoberfredy is a private, single-user homeserver application for finding
 German rental listings, one job per search, any number of cities. It
 discovers listings from ImmoScout24, Immowelt, Kleinanzeigen, and WG-Gesucht,
 extracts structured facts with an LLM, deduplicates across portals and cities,
-prices each listing against its own city's market models, and sends accepted
-listings to Telegram.
+and sends accepted listings to Telegram.
 
 It began as a fork of [Fredy](https://github.com/orangecoding/fredy) by
 Christian Kellner (orangecoding) and keeps his copyright notice at the head of
 every source file. The two have since diverged completely — the pipeline,
-schema, market models, monitoring and deployment here are not upstream's — so
+schema and deployment here are not upstream's — so
 this repository is developed and released on its own. See [LICENSE](LICENSE) for
 the terms, which include an attribution clause; the notices are required, not
 decorative.
@@ -47,13 +46,9 @@ flowchart LR
   C --> D["pipeline_work: parse"]
   D --> E["LLM, geocoding, and identity claims"]
   E --> F["Canonical listing"]
-  F --> G["pipeline_work: rate"]
-  G --> H["Ridge and GBM scores"]
-  H --> I["pipeline_work: notify"]
-  I --> J["Telegram"]
-  K["Model schedule"] --> L["pipeline_work: market-model"]
-  L --> G
-  M["Upkeep schedule"] --> N["pipeline_work: maintenance"]
+  F --> G["pipeline_work: notify"]
+  G --> H["Telegram"]
+  I["Upkeep schedule"] --> J["pipeline_work: maintenance"]
 ```
 
 Discovery cadence is each job's own — `interval` and `workingHours` live on the
@@ -69,21 +64,18 @@ different portals run concurrently under a global cap
 (`FREDY_DISCOVERY_CONCURRENCY`). A pair that slips past several due windows
 while waiting for a lane still only runs once, not once per window missed.
 
-Detail capture, parsing, rating, notification, model training, and database
-upkeep are work kinds in one durable queue. Each item has one shared lease,
-retry, terminal-state, and audit contract. Process restarts reclaim expired
-work rather than running repair scripts.
-
-The market cron only produces a durable work item; it never performs training
-itself. Dedupe and filtering are pipeline stages, not maintenance commands.
+Detail capture, parsing, notification, and database upkeep are work kinds in
+one durable queue. Each item has one shared lease, retry, terminal-state, and
+audit contract. Process restarts reclaim expired work rather than running
+repair scripts. Dedupe and filtering are pipeline stages, not maintenance
+commands.
 
 Retry budgets exist only where retry is the sole recovery path. Discovery has
-none — a failed run simply waits for the next interval. `rate`, `liveness`,
-`maintenance` and `market-model` get one attempt each, because a retrain, a
-maintenance pass or the next interval re-enqueues them anyway. `detail`, `parse`
-and `notify` keep real budgets: an unchanged card is only touched rather than
-reset, and a notification is keyed forever, so nothing else would bring them
-back.
+none — a failed run simply waits for the next interval. `liveness` and
+`maintenance` get one attempt each, because a maintenance pass or the next
+interval re-enqueues them anyway. `detail`, `parse` and `notify` keep real
+budgets: an unchanged card is only touched rather than reset, and a notification
+is keyed forever, so nothing else would bring them back.
 
 ### One advert, one extraction, one verdict per job
 
@@ -98,7 +90,7 @@ Every stage asks the same question before it spends anything: has this advert
 already been decided, under this job's configuration, on evidence that has not
 changed? The answer is stored against the advert's identity claims and is
 consulted at discovery, at detail capture, before the LLM call, and before
-rating.
+notification.
 
 Filtering is deliberately uneven, because the stages differ in what they cost:
 
@@ -139,21 +131,14 @@ listing decides nothing about its verdict — the polygon test and the
 ### One city, one market
 
 Adverts routinely give a street and no city, and a German street name matches in
-a hundred towns. So a job names the city it searches, and that city does two
-things: it anchors the geocoder's fallback candidates, and — folded to a market
-key, `München` to `muenchen` — it is the market a job's listings fall back to.
+a hundred towns. So a job names the city it searches. That city anchors the
+geocoder's fallback candidates and, folded to a stable key such as `München` to
+`muenchen`, isolates provider health and listing identity across cities.
 
 A listing's market is read from the locality the geocoder returned, not from the
 job that found it, because a Munich search can still surface a flat one town
-over. A listing that resolves to no city keeps a null market, is left out of
-every corpus, and is delivered unscored. Pricing it off another city's model
-would be worse than saying nothing.
-
-Each market trains and serves its own ridge and GBM artifacts, keyed by
-`(family, market)`. One city failing to train leaves the others alone, and a new
-city simply has no model until it has enough adverts to fit one — its listings
-arrive unscored in the meantime, which is what the queue's `waiting_model`
-outcome already meant.
+over. A listing that resolves to no city keeps a null market. This geographic
+key is listing data; it is not a price score.
 
 ## Data policy
 
@@ -161,10 +146,10 @@ The SQLite schema has one current migration:
 `lib/services/storage/migrations/sql/100.current-schema.js`. It creates a clean
 database from scratch and is re-applied whenever its checksum changes, so it must
 stay idempotent — everything it does is `IF NOT EXISTS` or guarded by a shape
-check. Its `dropLegacySurface` step removes what this deployment no longer has:
-the `users` and session tables from when Fredy shipped a web UI, and the market
-surface-cell table the ridge field replaced. Foreign keys are suspended while it
-runs, because dropping a constrained column means rebuilding the table.
+check. Its cleanup steps remove what this deployment no longer has, including
+the users and session tables from when Fredy shipped a web UI and the retired
+price-model tables. Foreign keys are suspended while it runs, because dropping
+a constrained column means rebuilding the table.
 
 - `listings` holds extractions only. A listing exists once the LLM has read the
   advert; what each job decided about it is a `listing_verdicts` row, and an
@@ -193,8 +178,9 @@ runs, because dropping a constrained column means rebuilding the table.
   references.
 - Source observations and LLM calls retain hashes, byte counts, outcomes, and
   timing rather than duplicating raw pages, prompts, or responses.
-- Source URLs, filter decisions, processing attempts, merges, scores, and
-  notification results remain auditable.
+- Source URLs, filter decisions, processing attempts, merges, and notification
+  results remain auditable. Historical scoring audit events from deployments
+  predating price-model removal are preserved as immutable history.
 - There is no backfill or repair pipeline. Terminal work payloads are compacted
   automatically after their durable result is attached.
 
@@ -263,7 +249,6 @@ not generated from it; keep the two in sync when the registry changes.
 | `FREDY_MAINTENANCE_ENABLED`  | `true`  | Set 0 to stop scheduled maintenance work items.    |
 | `FREDY_NOTIFICATION_ENABLED` | `true`  | Set 0 to stop notification delivery.               |
 | `FREDY_PARSER_ENABLED`       | `true`  | Set 0 to stop the LLM parser worker.               |
-| `FREDY_RATING_ENABLED`       | `true`  | Set 0 to stop market rating.                       |
 
 #### Discovery scheduler
 
@@ -286,7 +271,6 @@ not generated from it; keep the two in sync when the registry changes.
 | `FREDY_PARSER_MAX_ITEM_FAILURES`     | `8`        | Attempts before a parse item is abandoned.                       |
 | `FREDY_NOTIFICATION_ITEM_TIMEOUT_MS` | `120000`   | Deadline for one notification digest.                            |
 | `FREDY_NOTIFICATION_BATCH_SIZE`      | `50`       | Deliveries considered for one digest.                            |
-| `FREDY_RATING_ITEM_TIMEOUT_MS`       | `30000`    | Deadline for one market rating.                                  |
 | `FREDY_MAINTENANCE_ITEM_TIMEOUT_MS`  | `1800000`  | Deadline for automatic database upkeep.                          |
 | `FREDY_WORK_IDLE_POLL_MS`            | `1000`     | Idle sleep between empty work-queue polls.                       |
 | `FREDY_WORK_MAX_BACKOFF_MS`          | `900000`   | Ceiling on retry and park backoff for work items.                |
@@ -324,18 +308,6 @@ not generated from it; keep the two in sync when the registry changes.
 | `FREDY_PROVIDER_BREAKER_ITEM_CHALLENGES` | `8`        | Challenged single requests, with no success between, before a provider is paused. |
 | `FREDY_PROVIDER_BREAKER_MAX_COOLDOWN_MS` | `21600000` | Ceiling on provider pause.                                                        |
 
-#### Market model and metrics
-
-| Variable                              | Default     | Purpose                                                   |
-| ------------------------------------- | ----------- | --------------------------------------------------------- |
-| `FREDY_MARKET_DB_PATH`                | _unset_     | Override the market SQLite path (defaults to app db).     |
-| `FREDY_MARKET_EXPORTER_PORT`          | `9217`      | Prometheus exporter port; 0 disables it.                  |
-| `FREDY_MARKET_INTERVAL_LEVEL`         | `0.8`       | Conformal interval coverage level.                        |
-| `FREDY_MARKET_MODEL_CRON`             | `0 2 * * *` | Market training schedule; "0" disables training entirely. |
-| `FREDY_MARKET_MODEL_INTERVAL_SECONDS` | `86400`     | Minimum seconds between retrains; 0 disables training.    |
-| `FREDY_MARKET_MODEL_RUN_TIMEOUT_MS`   | `1800000`   | Deadline for one retrain run.                             |
-| `FREDY_PYTHON_BIN`                    | `python3`   | Python used for the LightGBM trainer.                     |
-
 #### Maintenance
 
 | Variable                         | Default     | Purpose                                                                      |
@@ -362,14 +334,8 @@ Node.js 22 or newer is required.
 
 ```bash
 yarn install
-yarn market:setup
 yarn start:backend
 ```
-
-For local GBM training, set
-`FREDY_PYTHON_BIN=.market-venv/bin/python3` in `.env.local`. The container uses
-the same pinned [`requirements.txt`](tools/market/requirements.txt)
-automatically.
 
 Quality checks:
 
@@ -377,11 +343,6 @@ Quality checks:
 yarn format:check
 yarn lint
 ```
-
-Fredy's purpose and pipeline dashboards live with the shared theme in the
-central homeserver observability source. This repository owns only the
-bounded operational metrics they query; the homeserver release builds and
-provisions the dashboards centrally.
 
 CI checks the application, builds the Docker image, starts it through the real
 migration path, and requires a healthy `/health` response before publishing.

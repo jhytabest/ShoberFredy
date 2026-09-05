@@ -12,8 +12,6 @@
     "lint:fix": "yarn lint --fix",
     "test": "node --test test/*.test.js",
     "migratedb": "node lib/services/storage/migrations/migrate.js",
-    "market:setup": "python3 -m venv .market-venv && .market-venv/bin/pip install --disable-pip-version-check -r tools/market/requirements.txt",
-    "market:exporter": "node tools/market/marketExporter.js",
     "maintenance": "node --env-file-if-exists=.env.local tools/maintenance/database.js",
     "copyright": "node ./copyright.js"
   },
@@ -56,7 +54,6 @@
     "cloakbrowser": "0.5.10",
     "fastify": "^5.12.3",
     "nanoid": "6.0.1",
-    "node-cron": "^4.6.0",
     "node-fetch": "3.3.2",
     "p-throttle": "^8.1.0",
     "puppeteer-core": "^25.10.0",

@@ -11,11 +11,12 @@ import {
   setJobStatus,
   updateJob,
 } from '../../lib/services/storage/jobStorage.js';
-import { validateJobDocument } from '../../lib/services/storage/jobDocument.js';
+import { validateJobDocument, berlinRentalJob } from '../../lib/services/storage/jobDocument.js';
 
 export const JOBS_USAGE = `  yarn maintenance jobs list
   yarn maintenance jobs show <id>
   yarn maintenance jobs add <json-document>
+  yarn maintenance jobs template berlin <json-document>
   yarn maintenance jobs set <id> <field> <json-value>
   yarn maintenance jobs patch <id> <json-document>
   yarn maintenance jobs enable <id>
@@ -33,6 +34,13 @@ deployment-wide default left to inherit:
 
 export async function runJobs(args, { usageError }) {
   const [action, ...rest] = args;
+
+  if (action === 'template' && rest[0] === 'berlin' && rest.length === 2) {
+    const document = berlinRentalJob(parseJson(rest[1], 'job document', usageError));
+    if (!document.spatialFilter) return usageError('The Berlin job needs its own spatialFilter polygons');
+    await validateJobDocument(document);
+    return redactNotify(document);
+  }
 
   if (action === 'list' && !rest.length) {
     return getJobs({ includeDisabled: true }).map(summarize);

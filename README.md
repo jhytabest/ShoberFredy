@@ -179,8 +179,9 @@ a constrained column means rebuilding the table.
 - Source observations and LLM calls retain hashes, byte counts, outcomes, and
   timing rather than duplicating raw pages, prompts, or responses.
 - Source URLs, filter decisions, processing attempts, merges, and notification
-  results remain auditable. Historical scoring audit events from deployments
-  predating price-model removal are preserved as immutable history.
+  results remain auditable. Scoring audit events and queue rows left behind by
+  the retired price model are not history worth keeping, and a deployment that
+  still carries them can delete them.
 - There is no backfill or repair pipeline. Terminal work payloads are compacted
   automatically after their durable result is attached.
 

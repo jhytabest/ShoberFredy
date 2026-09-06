@@ -2,7 +2,7 @@
 
 Shoberfredy is a private, single-user homeserver application for finding
 German rental listings, one job per search, any number of cities. It
-discovers listings from ImmoScout24, Immowelt, Kleinanzeigen, and WG-Gesucht,
+discovers listings from ImmoScout24, Kleinanzeigen, and WG-Gesucht,
 extracts structured facts with an LLM, deduplicates across portals and cities,
 and sends accepted listings to Telegram.
 
@@ -464,8 +464,8 @@ provider connects directly: Fredy has no proxy setting and no provider waits on
 one, because routing egress is the host's job — a VPN or exit node in front of
 the container is invisible to the application and needs no configuration in it.
 
-Immowelt is the provider most sensitive to where the traffic comes from. From an
-address a portal dislikes it answers searches with an HTTP 403 bot challenge and
-no cards, which is indistinguishable from changed markup and drives the circuit
-breaker to its six-hour ceiling. If that happens, route the container's egress
-somewhere friendlier rather than looking for a setting here.
+Immowelt is gone. Its search API answered from this deployment's egress, but
+every expose page behind it returned an HTTP 403 challenge, so the provider
+discovered adverts it could never read and spent its failure budget doing it.
+A portal that refuses the detail page refuses the listing; adding it back means
+solving the egress question first, not restoring the adapter.

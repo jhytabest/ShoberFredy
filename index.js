@@ -9,16 +9,17 @@ import { checkIfConfigIsAccessible, getProviders, refreshConfig } from './lib/ut
 import { runMigrations } from './lib/services/storage/migrations/migrate.js';
 import logger from './lib/services/logger.js';
 import SqliteConnection, { computeDbPath } from './lib/services/storage/SqliteConnection.js';
-import { SCHEDULER_WORKER, initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
+import { initJobExecutionService } from './lib/services/jobs/jobExecutionService.js';
 import { ensureValidBinary } from './lib/services/ensureValidBinary.js';
 import { startHealthServer } from './lib/health/healthServer.js';
 import { startParserWorker } from './lib/services/pipeline/parserWorker.js';
 import { startNotificationDispatcher } from './lib/services/pipeline/notificationDispatcher.js';
-import { startLivenessWorker } from './lib/services/pipeline/livenessWorker.js';
 import { startDetailFetchWorker } from './lib/services/pipeline/detailFetchWorker.js';
 import { startMaintenanceWorker } from './lib/services/pipeline/maintenanceWorker.js';
-import { expectWorkers } from './lib/services/pipeline/workerSupervisor.js';
+import { attachDatabaseLog } from './lib/services/storage/runtimeEventStorage.js';
 import { env, timeoutOrderingProblems } from './lib/shared/env.js';
+
+process.umask(0o077);
 
 if (fs.existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
   process.loadEnvFile('.env.local');
@@ -40,10 +41,6 @@ if (timeoutProblems.length) {
 sharp.cache(false);
 sharp.concurrency(1);
 
-logger.info('Checking CloakBrowser binary...');
-await ensureValidBinary();
-logger.info('CloakBrowser binary ready.');
-
 const isConfigAccessible = await checkIfConfigIsAccessible();
 if (!isConfigAccessible) {
   logger.error('Configuration exists, but is not accessible. Please check the file permission');
@@ -57,6 +54,12 @@ if (process.exitCode) {
   throw new Error('Database migrations failed; refusing to start against an incomplete schema.');
 }
 
+attachDatabaseLog(SqliteConnection.getConnection());
+
+logger.info('Checking CloakBrowser binary...');
+await ensureValidBinary();
+logger.info('CloakBrowser binary ready.');
+
 const { dir: sqliteDir } = await computeDbPath();
 if (!fs.existsSync(sqliteDir)) {
   fs.mkdirSync(sqliteDir, { recursive: true });
@@ -68,14 +71,8 @@ await startHealthServer(env('FREDY_HEALTH_PORT'));
 
 logger.info('Started successfully. Listings are delivered over Telegram; there is no UI.');
 
-const startedWorkers = [
-  startDetailFetchWorker({ providers }),
-  startParserWorker(),
-  startMaintenanceWorker(),
-  startLivenessWorker({ providers }),
-  startNotificationDispatcher(),
-];
+startDetailFetchWorker({ providers });
+startParserWorker();
+startMaintenanceWorker();
+startNotificationDispatcher();
 initJobExecutionService({ providers });
-
-// After initJobExecutionService, which is what registers the scheduler.
-expectWorkers([...startedWorkers.filter(Boolean), SCHEDULER_WORKER]);

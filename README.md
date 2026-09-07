@@ -143,9 +143,15 @@ key is listing data; it is not a price score.
 
 The schema uses ordered, append-only migrations. `100.current-schema.js` is the
 unchanged historical baseline; `101.archive-and-event-history.js` retires listing
-availability and adds durable event history. Applied checksums are immutable.
-A changed applied migration stops startup. Each migration and its ledger entry
-commit in one transaction; subsequent changes belong in a new migration.
+availability and adds durable event history. Applied checksums are immutable,
+with one transition exception: known historical checksums of the previously
+mutable migration 100 may advance through the frozen baseline's existing upgrade
+logic when it is the sole ledger entry. The schema changes, replacement ledger
+entry and audit of the previous entry commit together before migration 101 runs.
+Unknown checksums, a modified frozen baseline, or checksum changes after later
+migrations have been recorded still stop startup. This transition does not restore
+upgrade paths removed before the frozen baseline. Subsequent schema changes belong
+in a new migration.
 
 Listings are an archive of captured adverts. There is no active/gone status,
 no scheduled visit to old advert pages, and no claim that an archived advert is

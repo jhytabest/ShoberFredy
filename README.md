@@ -166,20 +166,20 @@ existing jobs, preventing a historical notification wave when the flag disappear
 It does not replay terminal failures, reparse historical extractions, or resend
 unverifiable deliveries.
 
-| Data                                              | Purpose and retention                                                                                                                                                                        |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listings`, `listing_attributes`, `listing_texts` | Canonical facts, extraction provenance and one richest full-text capture per advert.                                                                                                         |
-| `listing_verdicts`, `source_rejections`           | Per-job decisions; early card refusals do not become canonical listings.                                                                                                                     |
-| `listing_claims`, `source_identity_keys`          | Indexed advert identities and source matching, without whole-table JSON scans.                                                                                                               |
-| `listing_sources`, `listing_source_observations`  | Source URLs, ownership, unique content hashes, byte counts and observation times; not copies of every raw HTML page.                                                                         |
-| `pipeline_work`, `pipeline_audit_events`          | Durable work and its claims, retries, outcomes, decisions, merges and cancellations. Terminal payloads are compacted except failed parse captures; work rows and audit history are retained. |
-| `runtime_events`                                  | Application logs and named events with credential redaction. Job/settings changes record operation and identity, excluding secret values.                                                    |
-| `discovery_run_audit`                             | Every finished/skipped source search, rather than an overwritten last-run report.                                                                                                            |
-| `llm_call_audit`                                  | Request/response bodies, model, timing, provider usage/cost when supplied, HTTP outcomes, hashes and extraction-validation results. Historical bodies are not fabricated.                    |
-| `geocode_call_audit`                              | Every HTTP candidate, accepted result/precision, provider status, timing, errors and owning queue item. Cache hits and deferrals are runtime events.                                         |
-| `notification_receipts`                           | Actual per-chat Telegram message IDs, used to avoid resending to successful recipients during a partial retry.                                                                               |
-| `notification_suppressions`                       | Intentional non-delivery and its reason, separate from successful delivery.                                                                                                                  |
-| `homeserver_geocode_cache`                        | City-scoped results; unreachable legacy unscoped rows move into event history. `attempts` counts cache writes, not HTTP calls.                                                               |
+| Data                                              | Purpose and retention                                                                                                                                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listings`, `listing_attributes`, `listing_texts` | Canonical facts, extraction provenance and one richest full-text capture per advert.                                                                                                                       |
+| `listing_verdicts`, `source_rejections`           | Per-job decisions; early card refusals do not become canonical listings.                                                                                                                                   |
+| `listing_claims`, `source_identity_keys`          | Indexed advert identities and source matching, without whole-table JSON scans.                                                                                                                             |
+| `listing_sources`, `listing_source_observations`  | Source URLs, ownership, unique content hashes, byte counts and observation times; shared payload references preserve recent source data.                                                                   |
+| `pipeline_work`, `pipeline_audit_events`          | Durable work and its claims, retries, outcomes, decisions, merges and cancellations. Terminal capture bodies expire after 30 days; unfinished work retains its inputs. Work rows and audit history remain. |
+| `runtime_events`                                  | Application logs and named events with credential redaction. Job/settings changes record operation and identity, excluding secret values.                                                                  |
+| `discovery_run_audit`                             | Every finished/skipped source search, rather than an overwritten last-run report.                                                                                                                          |
+| `llm_call_audit`                                  | Attempt groups, ordered model position, provider, timing, usage/cost, refunds, HTTP outcomes, hashes, shared payload references and validation results. Historical bodies are not fabricated.              |
+| `geocode_call_audit`                              | Every HTTP candidate, accepted result/precision, provider status, timing, errors and owning queue item. Cache hits and deferrals are runtime events.                                                       |
+| `notification_receipts`                           | Actual per-chat Telegram message IDs, used to avoid resending to successful recipients during a partial retry.                                                                                             |
+| `notification_suppressions`                       | Intentional non-delivery and its reason, separate from successful delivery.                                                                                                                                |
+| `homeserver_geocode_cache`                        | City-scoped results; unreachable legacy unscoped rows move into event history. `attempts` counts cache writes, not HTTP calls.                                                                             |
 
 Canonical facts, claims, per-job decisions and notification enqueueing commit
 together. `notified_at` records successful delivery. Historical timestamps without
@@ -194,12 +194,34 @@ processed at a time. The detail browser closes before image processing; encoding
 reuses resized pixels. These bounds reduce peaks without changing host limits.
 Upkeep removes unreferenced files older than 24 hours and marks missing image
 references in SQLite. It neither visits old adverts nor redownloads their images.
-Referenced media has no application age-based expiry.
+Referenced pictures expire after 14 days (`FREDY_MEDIA_RETENTION_DAYS`). A shared
+file remains while a newer capture still needs it: expiry uses the latest capture
+reference or file reuse time. Existing files without retention metadata use their
+modification time. Upkeep marks expired references, retains original URLs, content
+hashes and dimensions, and records deletion events. No age-based redownload occurs.
+Cleanup runs through scheduled maintenance, so expiry is applied on the next run.
 
-Events and terminal work rows have no automatic age-based deletion. This
-intentionally allows database growth. Successful extraction provenance retains
-the supplied system/evidence input as well as the structured output. Optional
-`FREDY_DB_VACUUM=1` lets scheduled upkeep return unused SQLite pages to disk.
+Events, structured extractions, listing texts, decisions, receipts and terminal
+work rows have no automatic age-based deletion. Compact audit payloads (up to
+2 KiB), system prompts and tool schemas are retained too. Larger audit bodies and
+terminal capture/discovery inputs expire after 30 days (`FREDY_AUDIT_PAYLOAD_DAYS`).
+Unfinished work keeps its capture regardless of age; dead work is terminal and
+its raw capture expires under the same policy. Historical outcomes are not erased.
+
+`audit_payloads` stores redacted JSON once per SHA-256. Request manifests share
+message and tool-schema payloads across models and retries. Foreign keys link
+attempts and observations to payloads; `audit_payload_edges` preserves the manifest
+relationships. Expiry clears the large body but retains its hash, byte count and
+trim timestamp, so references remain valid and expiry is distinguishable from a
+missing record. Reusing content restores it and extends its retention. Wire hashes
+and byte counts remain separate from redacted storage hashes. Successful extraction
+provenance references the same system/evidence payloads as its request.
+
+Maintenance handles legacy inline bodies incrementally in bounded transactions,
+with a five-second payload-cleanup budget per run. It does not rewrite historical
+rows during startup. SQLite reuses freed pages; optional `FREDY_DB_VACUUM=1` returns
+unused pages to disk. Retention bounds large bodies, not total database size:
+compact durable history continues to grow.
 
 ## Docker
 
@@ -290,7 +312,7 @@ not generated from it; keep the two in sync when the registry changes.
 | ------------------------------------ | ---------- | --------------------------------------------------------------- |
 | `FREDY_DETAIL_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one detail capture.                                |
 | `FREDY_DETAIL_MAX_FAILURES`          | `8`        | Attempts before a detail item is abandoned.                     |
-| `FREDY_PARSER_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for one parse (text + repair).                         |
+| `FREDY_PARSER_ITEM_TIMEOUT_MS`       | `300000`   | Deadline for the model chain and finalization.                  |
 | `FREDY_PARSER_MAX_ITEM_FAILURES`     | `8`        | Attempts before a parse item is abandoned.                      |
 | `FREDY_NOTIFICATION_ITEM_TIMEOUT_MS` | `120000`   | Deadline for one notification digest.                           |
 | `FREDY_NOTIFICATION_BATCH_SIZE`      | `50`       | Deliveries considered for one digest.                           |
@@ -310,7 +332,7 @@ not generated from it; keep the two in sync when the registry changes.
 | `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000`  | Cap on embedded JSON sent to the LLM.                    |
 | `FREDY_LLM_MAX_LISTING_FAILURES`       | `5`      | LLM attempts before a listing is abandoned.              |
 | `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`  | Cap on captured page text sent to the LLM.               |
-| `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `120000` | Deadline for a single LLM request.                       |
+| `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `75000`  | Deadline for a single LLM request.                       |
 | `FREDY_LLM_TEXT_MODEL`                 | _unset_  | OpenRouter model id for text extraction.                 |
 | `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`  | Initial pause after an upstream LLM request failure.     |
 | `FREDY_LLM_UPSTREAM_MAX_BACKOFF_MS`    | `900000` | Maximum per-model pause after repeated request failures. |
@@ -459,12 +481,15 @@ pause. An explicitly configured fallback remains usable while the primary is
 paused; account rate limits and the daily budget still apply to both. These are
 request controls, not monitoring or alerting.
 
-The default request deadline is 120 seconds and the parse deadline is 300 seconds.
-An overall parse deadline defers the item without consuming semantic attempts.
-These limits allow slower provider responses, but cannot create provider capacity
-or guarantee that any particular free model will answer.
+Each model gets at most one request per pass, including invalid-output failures.
+The default per-model deadline is 75 seconds, including client-side rate waiting.
+The parser shares its 300-second deadline across at most three models, reserving
+65 seconds for finalization; smaller configured deadlines reduce each model's
+allocation. Output is capped at 4,096 tokens (`FREDY_LLM_MAX_OUTPUT_TOKENS`). An
+infrastructure or overall deadline failure defers work without spending semantic
+attempts. Free upstream capacity and successful extraction are not guaranteed.
 
-Failed parse work keeps its captured evidence. If ordinary discovery later
+Failed parse work keeps its captured evidence for the terminal-payload retention window. If ordinary discovery later
 provides another capture for an identical item that previously died from a
 recognizable infrastructure failure, that work can resume with a recorded recovery
 event. Invalid extractions and intentional rejections are not automatically reset.
@@ -473,14 +498,48 @@ code already discarded the capture cannot be safely reconstructed or bulk replay
 Observing an unchanged work item no longer changes its outcome timestamp; source
 observations retain their own last-seen time.
 
-The optional fallback remains explicitly configured with
-`FREDY_LLM_FALLBACK_MODEL`; no paid model is silently enabled. Provider-supplied
-usage and cost are recorded; absent costs remain unknown.
+The default order is:
+
+1. `nvidia/nemotron-3-ultra-550b-a55b:free`
+2. `poolside/laguna-s-2.1:free`
+3. `nvidia/nemotron-3.5-lightning:free`
+
+`FREDY_LLM_TEXT_MODEL` sets the primary. `FREDY_LLM_FALLBACK_MODELS` accepts an
+ordered comma-separated list; explicitly setting it empty disables fallbacks.
+When the new variable is absent, the legacy `FREDY_LLM_FALLBACK_MODEL` remains
+an override. At most three distinct models are allowed and every ID must end in
+`:free`. Requests also enforce zero prompt, completion and per-request prices.
+Provider-side limits advance to the next eligible model. Platform quota headers
+pause the whole account; authentication/credit failures pause account requests
+rather than cycling models. Both numeric and HTTP-date Retry-After are honored.
+
+Unanswered failures refund only the application's local reservation. They do not
+restore external quotas or prove that an aborted request used no provider compute.
+Completed invalid answers still count locally. Provider-reported cost is recorded;
+missing cost remains unknown, not zero. All fallbacks use the same OpenRouter
+account and the two NVIDIA models share a provider.
+
+Model evidence contains sanitized listing passages and explicitly selected
+property fields from JSON-LD. Whole API responses, portal contact schemas,
+tracking, unrelated organization metadata and image URLs are excluded. Contact
+lines, email addresses, links and recognizable phone numbers are removed.
+Free text is not guaranteed anonymous: names or personal circumstances may still
+appear in an advert. This is data minimization, not a promise of confidential or
+zero-retention processing. Poolside's free endpoint may use input/output for
+training; NVIDIA's free endpoint has its own logging/data policy. Existing account
+privacy restrictions are respected, never relaxed to make a fallback work.
+See [Poolside](https://openrouter.ai/poolside/laguna-s-2.1:free) and
+[NVIDIA](https://openrouter.ai/nvidia/nemotron-3.5-lightning:free).
 
 Evidence is checked for verbatim support and obvious semantic contradictions:
 a warm/total rent alone cannot establish cold rent, one unlabeled figure cannot
 establish both, and renovation alone cannot establish new construction. These
-checks guide repair calls; they cannot prove complete semantic correctness.
+checks decide whether to accept a response or try the next model; they cannot
+prove complete semantic correctness. The model cites passage IDs and the parser
+restores exact quotes before checking only the transmitted evidence. Cold and
+warm rent must be explicitly stated; rent totals are never estimated or calculated.
+A construction year within five years of capture can support new construction;
+negative amenities do not require positive construction wording.
 Updating the prompt does not trigger an archive backfill.
 
 A bare street without a city or postcode is geocoded within the job city; an
@@ -489,8 +548,12 @@ replaced with the search city. Cache keys include the city. Fine coordinates
 are reused for up to a year, coarse results for the configured interval
 (14 days by default), and definitive misses for 30 days. Expiry is checked only
 when a capture needs that address; no background refresh visits old listings.
-A geocoder outage leaves work deferred with its LLM result retained, instead of
-producing a permanent missing-coordinate rejection after four waits.
+A geocoder outage leaves work deferred with its LLM result retained. Its pause
+survives restarts in `pipeline_control`. Candidate progress is stored separately,
+so a retry skips candidates already rejected for the same address/candidate set.
+Each geocoding pass has a 60-second total deadline; every attempted HTTP candidate
+has an audit row and shared response payload. Accepted cache results remain
+compact and do not expire with their audit bodies.
 
 ## Ad hoc event queries
 
@@ -532,3 +595,32 @@ every expose page behind it returned an HTTP 403 challenge, so the provider
 discovered adverts it could never read and spent its failure budget doing it.
 A portal that refuses the detail page refuses the listing; adding it back means
 solving the egress question first, not restoring the adapter.
+
+### Audit payloads and retention queries
+
+`llm_attempt_history`, `runtime_event_details` and `geocode_attempt_history` expose
+compact records with payload availability for ad hoc analysis. They are SQLite
+views, not monitoring processes. `readLlmRequest(id)` in
+`lib/services/storage/auditPayloadStorage.js` reconstructs a retained request's
+JSON values and returns null when any required body has expired. Original wire
+hashes are retained separately; JSON key ordering can differ on reconstruction.
+
+```sql
+SELECT model, outcome, validation_status, COUNT(*) AS calls,
+       ROUND(AVG(duration_ms)) AS average_ms, SUM(budget_refunded) AS local_refunds
+FROM llm_attempt_history
+WHERE started_at >= (unixepoch() - 86400) * 1000
+GROUP BY model, outcome, validation_status;
+
+SELECT attempt_group, model_position, model, provider, outcome, validation_status
+FROM llm_attempt_history WHERE queue_id = :queue_id
+ORDER BY started_at, model_position;
+
+SELECT permanent, COUNT(*) AS payloads, SUM(byte_size) AS original_bytes,
+       SUM(CASE WHEN body_json IS NOT NULL THEN byte_size ELSE 0 END) AS retained_bytes
+FROM audit_payloads GROUP BY permanent;
+
+SELECT event, message, created_at, payload_json, trimmed_at
+FROM runtime_event_details WHERE event IN ('media_expired', 'audit_retention')
+ORDER BY created_at DESC LIMIT 100;
+```

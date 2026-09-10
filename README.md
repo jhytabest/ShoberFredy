@@ -143,7 +143,8 @@ key is listing data; it is not a price score.
 
 The schema uses ordered, append-only migrations. `100.current-schema.js` is the
 unchanged historical baseline; `101.archive-and-event-history.js` retires listing
-availability and adds durable event history. Applied checksums are immutable,
+availability and adds durable event history. Migration 102 indexes stored-image
+paths and notification ownership for maintenance and ad hoc queries. Applied checksums are immutable,
 with one transition exception: known historical checksums of the previously
 mutable migration 100 may advance through the frozen baseline's existing upgrade
 logic when it is the sole ledger entry. The schema changes, replacement ledger
@@ -165,20 +166,20 @@ existing jobs, preventing a historical notification wave when the flag disappear
 It does not replay terminal failures, reparse historical extractions, or resend
 unverifiable deliveries.
 
-| Data                                              | Purpose and retention                                                                                                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listings`, `listing_attributes`, `listing_texts` | Canonical facts, extraction provenance and one richest full-text capture per advert.                                                                                      |
-| `listing_verdicts`, `source_rejections`           | Per-job decisions; early card refusals do not become canonical listings.                                                                                                  |
-| `listing_claims`, `source_identity_keys`          | Indexed advert identities and source matching, without whole-table JSON scans.                                                                                            |
-| `listing_sources`, `listing_source_observations`  | Source URLs, ownership, unique content hashes, byte counts and observation times; not copies of every raw HTML page.                                                      |
-| `pipeline_work`, `pipeline_audit_events`          | Durable work and its claims, retries, outcomes, decisions, merges and cancellations. Terminal payloads are compacted; work rows and audit history are retained.           |
-| `runtime_events`                                  | Application logs and named events with credential redaction. Job/settings changes record operation and identity, excluding secret values.                                 |
-| `discovery_run_audit`                             | Every finished/skipped source search, rather than an overwritten last-run report.                                                                                         |
-| `llm_call_audit`                                  | Request/response bodies, model, timing, provider usage/cost when supplied, HTTP outcomes, hashes and extraction-validation results. Historical bodies are not fabricated. |
-| `geocode_call_audit`                              | Every HTTP candidate, accepted result/precision, provider status, timing, errors and owning queue item. Cache hits and deferrals are runtime events.                      |
-| `notification_receipts`                           | Actual per-chat Telegram message IDs, used to avoid resending to successful recipients during a partial retry.                                                            |
-| `notification_suppressions`                       | Intentional non-delivery and its reason, separate from successful delivery.                                                                                               |
-| `homeserver_geocode_cache`                        | City-scoped results; unreachable legacy unscoped rows move into event history. `attempts` counts cache writes, not HTTP calls.                                            |
+| Data                                              | Purpose and retention                                                                                                                                                                        |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listings`, `listing_attributes`, `listing_texts` | Canonical facts, extraction provenance and one richest full-text capture per advert.                                                                                                         |
+| `listing_verdicts`, `source_rejections`           | Per-job decisions; early card refusals do not become canonical listings.                                                                                                                     |
+| `listing_claims`, `source_identity_keys`          | Indexed advert identities and source matching, without whole-table JSON scans.                                                                                                               |
+| `listing_sources`, `listing_source_observations`  | Source URLs, ownership, unique content hashes, byte counts and observation times; not copies of every raw HTML page.                                                                         |
+| `pipeline_work`, `pipeline_audit_events`          | Durable work and its claims, retries, outcomes, decisions, merges and cancellations. Terminal payloads are compacted except failed parse captures; work rows and audit history are retained. |
+| `runtime_events`                                  | Application logs and named events with credential redaction. Job/settings changes record operation and identity, excluding secret values.                                                    |
+| `discovery_run_audit`                             | Every finished/skipped source search, rather than an overwritten last-run report.                                                                                                            |
+| `llm_call_audit`                                  | Request/response bodies, model, timing, provider usage/cost when supplied, HTTP outcomes, hashes and extraction-validation results. Historical bodies are not fabricated.                    |
+| `geocode_call_audit`                              | Every HTTP candidate, accepted result/precision, provider status, timing, errors and owning queue item. Cache hits and deferrals are runtime events.                                         |
+| `notification_receipts`                           | Actual per-chat Telegram message IDs, used to avoid resending to successful recipients during a partial retry.                                                                               |
+| `notification_suppressions`                       | Intentional non-delivery and its reason, separate from successful delivery.                                                                                                                  |
+| `homeserver_geocode_cache`                        | City-scoped results; unreachable legacy unscoped rows move into event history. `attempts` counts cache writes, not HTTP calls.                                                               |
 
 Canonical facts, claims, per-job decisions and notification enqueueing commit
 together. `notified_at` records successful delivery. Historical timestamps without
@@ -225,9 +226,10 @@ read-only root filesystem, drops Linux capabilities, and enables
 `no-new-privileges`.
 
 The database lives at `/db/listings.db` and content-addressed media at
-`/db/media`. Both belong to the persistent application volume. An external
-age-based media deletion policy can still remove referenced files; the application
-cannot repair that host policy. SQLite files are private to the application user.
+`/db/media`. Both belong to the persistent application volume. The host must not
+age-prune this directory: it cannot distinguish referenced images from orphans.
+Image expiry belongs to the application. Removing a host pruning rule prevents
+further deletions but cannot restore files already removed. SQLite files are private to the application user.
 Absolute `sqlitepath` values are honored directly; relative paths resolve from
 the application directory. Local development can use `{"sqlitepath":"db"}`.
 
@@ -302,16 +304,17 @@ not generated from it; keep the two in sync when the registry changes.
 
 #### LLM
 
-| Variable                               | Default  | Purpose                                     |
-| -------------------------------------- | -------- | ------------------------------------------- |
-| `FREDY_LLM_DAILY_LIMIT`                | `1000`   | Daily LLM request budget (UTC days).        |
-| `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000`  | Cap on embedded JSON sent to the LLM.       |
-| `FREDY_LLM_MAX_LISTING_FAILURES`       | `5`      | LLM attempts before a listing is abandoned. |
-| `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`  | Cap on captured page text sent to the LLM.  |
-| `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `120000` | Deadline for a single LLM request.          |
-| `FREDY_LLM_TEXT_MODEL`                 | _unset_  | OpenRouter model id for text extraction.    |
-| `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`  | Backoff after an upstream LLM rate limit.   |
-| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`     | Client-side OpenRouter rate limit.          |
+| Variable                               | Default  | Purpose                                                  |
+| -------------------------------------- | -------- | -------------------------------------------------------- |
+| `FREDY_LLM_DAILY_LIMIT`                | `1000`   | Daily LLM request budget (UTC days).                     |
+| `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000`  | Cap on embedded JSON sent to the LLM.                    |
+| `FREDY_LLM_MAX_LISTING_FAILURES`       | `5`      | LLM attempts before a listing is abandoned.              |
+| `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`  | Cap on captured page text sent to the LLM.               |
+| `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `120000` | Deadline for a single LLM request.                       |
+| `FREDY_LLM_TEXT_MODEL`                 | _unset_  | OpenRouter model id for text extraction.                 |
+| `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`  | Initial pause after an upstream LLM request failure.     |
+| `FREDY_LLM_UPSTREAM_MAX_BACKOFF_MS`    | `900000` | Maximum per-model pause after repeated request failures. |
+| `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`     | Client-side OpenRouter rate limit.                       |
 
 #### Filters and geocoding
 
@@ -447,6 +450,28 @@ failures defer work without consuming semantic extraction attempts. Resource
 outages are exempt from the item deferral-age cap. Invalid model answers retain
 a bounded retry budget. A reservation refunded after midnight returns to the
 day on which it was reserved.
+
+Model request failures now open a shared, persistent pause for that model,
+starting at one minute and doubling up to `FREDY_LLM_UPSTREAM_MAX_BACKOFF_MS`
+(default 15 minutes). This stops the next queued listing from immediately sending
+the same request to an unavailable provider. A successful response resets the
+pause. An explicitly configured fallback remains usable while the primary is
+paused; account rate limits and the daily budget still apply to both. These are
+request controls, not monitoring or alerting.
+
+The default request deadline is 120 seconds and the parse deadline is 300 seconds.
+An overall parse deadline defers the item without consuming semantic attempts.
+These limits allow slower provider responses, but cannot create provider capacity
+or guarantee that any particular free model will answer.
+
+Failed parse work keeps its captured evidence. If ordinary discovery later
+provides another capture for an identical item that previously died from a
+recognizable infrastructure failure, that work can resume with a recorded recovery
+event. Invalid extractions and intentional rejections are not automatically reset.
+There is no scheduled sweep or extra advert visit. Existing failed work whose old
+code already discarded the capture cannot be safely reconstructed or bulk replayed.
+Observing an unchanged work item no longer changes its outcome timestamp; source
+observations retain their own last-seen time.
 
 The optional fallback remains explicitly configured with
 `FREDY_LLM_FALLBACK_MODEL`; no paid model is silently enabled. Provider-supplied

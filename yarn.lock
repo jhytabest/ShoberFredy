@@ -1271,10 +1271,10 @@ p-locate@^5.0.0:
   dependencies:
     p-limit "^3.0.2"
 
-p-throttle@^8.1.0:
-  version "8.1.0"
-  resolved "https://registry.yarnpkg.com/p-throttle/-/p-throttle-8.1.0.tgz#990cb8ebb1dc657ab5c8025f43e02967cbaeb47c"
-  integrity sha512-c1wmXavsHZIC4g1OLhOsafK6jZSAeMo0Ap3yivj59PUcCkpacy5YgWdgIp/dB4vp1JZrfBSsPCR0YuADB+ENLQ==
+p-throttle@^8.1.1:
+  version "8.1.1"
+  resolved "https://registry.yarnpkg.com/p-throttle/-/p-throttle-8.1.1.tgz#ac3a0072c376006433dc7b1aa034255fd1192273"
+  integrity sha512-xxWFBUyvbrQ10XC3VAr0SoXoOCKXqCX/yvbFIkBE98upphHFwjIKR6AId13ZH3jngFfF6yK43QTOtrngYAmFMA==
 
 parse5-htmlparser2-tree-adapter@^7.1.0:
   version "7.1.0"

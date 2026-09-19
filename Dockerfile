@@ -1,4 +1,4 @@
-FROM node:24-trixie-slim@sha256:d7b4e5c4ad20b327d7bb16fab6aecd60ac20aa50f8514eb75a2b059e89abe48e
+FROM node:24-trixie-slim@sha256:23c6349d47723f5eb70c3f9b8124f33089cf88df9c21b6dd1818f8b856dae767
 
 # System deps for CloakBrowser + build tools for native modules (better-sqlite3)
 # fonts-* packages below are CloakBrowser's recommended Linux font set

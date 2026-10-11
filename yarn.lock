@@ -580,10 +580,10 @@ cliui@^9.0.1:
     strip-ansi "^7.1.0"
     wrap-ansi "^9.0.0"
 
-cloakbrowser@0.6.0:
-  version "0.6.0"
-  resolved "https://registry.yarnpkg.com/cloakbrowser/-/cloakbrowser-0.6.0.tgz#df6ee34be7e57a948750de5b7f55ee491b74faa8"
-  integrity sha512-Yj6ArfEVR+2Q44TZr40j/edX9pwcbyihLxmMBmUPJJp3rK7QrAc1n3CoWC3PHh6S2Ahihdhng47o78L7eIb4Ng==
+cloakbrowser@0.6.1:
+  version "0.6.1"
+  resolved "https://registry.yarnpkg.com/cloakbrowser/-/cloakbrowser-0.6.1.tgz#1904d1b4bdfa087815f0bd77e52055b70cee9377"
+  integrity sha512-9XVKgM63jyGtMJKY1cjtJPd9A8oOOUFlP//olS78sQ/SJNKgkwjK7awdnmLnEjB3tc0VbTtN1uLQDGMqxuytvQ==
   dependencies:
     tar "^7.0.0"
 

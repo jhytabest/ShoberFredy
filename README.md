@@ -201,27 +201,24 @@ modification time. Upkeep marks expired references, retains original URLs, conte
 hashes and dimensions, and records deletion events. No age-based redownload occurs.
 Cleanup runs through scheduled maintenance, so expiry is applied on the next run.
 
-Events, structured extractions, listing texts, decisions, receipts and terminal
-work rows have no automatic age-based deletion. Compact audit payloads (up to
-2 KiB), system prompts and tool schemas are retained too. Larger audit bodies and
-terminal capture/discovery inputs expire after 30 days (`FREDY_AUDIT_PAYLOAD_DAYS`).
-Unfinished work keeps its capture regardless of age; dead work is terminal and
-its raw capture expires under the same policy. Historical outcomes are not erased.
+Operational audit records and all request/response payloads expire after 14 days
+(`FREDY_AUDIT_PAYLOAD_DAYS`), including small bodies, prompts and tool schemas.
+Structured extractions, listing text, decisions, receipts and terminal work rows
+remain durable. Unfinished work keeps its capture regardless of age; terminal
+capture/discovery inputs expire after 14 days. Payload references are cleared
+transactionally before expired payloads are deleted. Successful extraction facts
+and their quotations remain available after their diagnostic inputs expire.
 
-`audit_payloads` stores redacted JSON once per SHA-256. Request manifests share
-message and tool-schema payloads across models and retries. Foreign keys link
-attempts and observations to payloads; `audit_payload_edges` preserves the manifest
-relationships. Expiry clears the large body but retains its hash, byte count and
-trim timestamp, so references remain valid and expiry is distinguishable from a
-missing record. Reusing content restores it and extends its retention. Wire hashes
-and byte counts remain separate from redacted storage hashes. Successful extraction
-provenance references the same system/evidence payloads as its request.
+For offline cleanup and compaction, stop Fredy and run `yarn maintenance prune-audit`
+using the same database mount. This applies migrations, removes expired audit
+history in batches and runs VACUUM; it does not inspect listings or redownload media.
+
 
 Maintenance handles legacy inline bodies incrementally in bounded transactions,
 with a five-second payload-cleanup budget per run. It does not rewrite historical
 rows during startup. SQLite reuses freed pages; optional `FREDY_DB_VACUUM=1` returns
-unused pages to disk. Retention bounds large bodies, not total database size:
-compact durable history continues to grow.
+unused pages to disk. Retention bounds operational history, not total database size:
+durable listing history continues to grow.
 
 ## Docker
 
@@ -333,7 +330,6 @@ not generated from it; keep the two in sync when the registry changes.
 | `FREDY_LLM_MAX_LISTING_FAILURES`       | `5`      | LLM attempts before a listing is abandoned.              |
 | `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`  | Cap on captured page text sent to the LLM.               |
 | `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `75000`  | Deadline for a single LLM request.                       |
-| `FREDY_LLM_TEXT_MODEL`                 | _unset_  | OpenRouter model id for text extraction.                 |
 | `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`  | Initial pause after an upstream LLM request failure.     |
 | `FREDY_LLM_UPSTREAM_MAX_BACKOFF_MS`    | `900000` | Maximum per-model pause after repeated request failures. |
 | `FREDY_OPENROUTER_REQUESTS_PER_MINUTE` | `18`     | Client-side OpenRouter rate limit.                       |
@@ -466,28 +462,18 @@ checks, database integrity monitoring or provider probes are scheduled.
 ## LLM and geocoding operations
 
 New parse work is preferred briefly. Expired leases and items waiting over an
-hour take priority, oldest first, so a continuous inflow cannot indefinitely
-starve old captures. Network, capacity, rate-limit and provider-configuration
+hour no longer monopolize processing: eligible work is ordered by its last
+service time, so retries rotate behind work that has waited longer. Network, capacity, rate-limit and provider-configuration
 failures defer work without consuming semantic extraction attempts. Resource
 outages are exempt from the item deferral-age cap. Invalid model answers retain
 a bounded retry budget. A reservation refunded after midnight returns to the
 day on which it was reserved.
 
-Model request failures now open a shared, persistent pause for that model,
-starting at one minute and doubling up to `FREDY_LLM_UPSTREAM_MAX_BACKOFF_MS`
-(default 15 minutes). This stops the next queued listing from immediately sending
-the same request to an unavailable provider. A successful response resets the
-pause. An explicitly configured fallback remains usable while the primary is
-paused; account rate limits and the daily budget still apply to both. These are
-request controls, not monitoring or alerting.
-
-Each model gets at most one request per pass, including invalid-output failures.
-The default per-model deadline is 75 seconds, including client-side rate waiting.
-The parser shares its 300-second deadline across at most three models, reserving
-65 seconds for finalization; smaller configured deadlines reduce each model's
-allocation. Output is capped at 4,096 tokens (`FREDY_LLM_MAX_OUTPUT_TOKENS`). An
-infrastructure or overall deadline failure defers work without spending semantic
-attempts. Free upstream capacity and successful extraction are not guaranteed.
+Request failures pause the single extraction service. Transient backoff starts
+at one minute and doubles up to 15 minutes; permanent configuration errors stay
+paused until corrected. One HTTP request has a 75-second deadline, within the
+parser's overall 300-second extraction/finalization deadline. Output is capped
+at 4,096 tokens. Infrastructure outages do not consume semantic failure attempts.
 
 Failed parse work keeps its captured evidence for the terminal-payload retention window. If ordinary discovery later
 provides another capture for an identical item that previously died from a
@@ -498,26 +484,24 @@ code already discarded the capture cannot be safely reconstructed or bulk replay
 Observing an unchanged work item no longer changes its outcome timestamp; source
 observations retain their own last-seen time.
 
-The default order is:
+Extraction uses only `nvidia/nemotron-3-ultra-550b-a55b:free`. There are no model
+selection variables or fallback calls. Each processing attempt sends one request
+with one forced `submit_listing` function, compatible-provider filtering and zero
+prompt, completion and request prices. See [OpenRouter tool calling](https://openrouter.ai/docs/guides/features/tool-calling).
+The request schema accepts only passage IDs supplied with that listing; exact
+quotations and sources are restored locally before factual validation.
 
-1. `nvidia/nemotron-3-ultra-550b-a55b:free`
-2. `poolside/laguna-s-2.1:free`
-3. `nvidia/nemotron-3.5-lightning:free`
+Rate limits and transient upstream failures pause extraction globally and honor
+numeric or HTTP-date Retry-After. Authentication, credit, model and request
+configuration failures stay paused until credentials change or the operator fixes
+the configuration and runs `yarn maintenance resume-llm`. Pending work is retained.
+Invalid extractions consume the semantic budget: five failures or a 24-hour work
+age ends retries. The least recently serviced eligible work is claimed first.
+API transport is recorded as `response_received`; validation records
+`extraction_valid` or `extraction_invalid` separately from HTTP status.
 
-`FREDY_LLM_TEXT_MODEL` sets the primary. `FREDY_LLM_FALLBACK_MODELS` accepts an
-ordered comma-separated list; explicitly setting it empty disables fallbacks.
-When the new variable is absent, the legacy `FREDY_LLM_FALLBACK_MODEL` remains
-an override. At most three distinct models are allowed and every ID must end in
-`:free`. Requests also enforce zero prompt, completion and per-request prices.
-Provider-side limits advance to the next eligible model. Platform quota headers
-pause the whole account; authentication/credit failures pause account requests
-rather than cycling models. Both numeric and HTTP-date Retry-After are honored.
-
-Unanswered failures refund only the application's local reservation. They do not
-restore external quotas or prove that an aborted request used no provider compute.
-Completed invalid answers still count locally. Provider-reported cost is recorded;
-missing cost remains unknown, not zero. All fallbacks use the same OpenRouter
-account and the two NVIDIA models share a provider.
+Unanswered failures refund only the local reservation, not provider quota or cost.
+No historical extraction sweep or notification replay is performed on upgrade.
 
 Model evidence contains sanitized listing passages and explicitly selected
 property fields from JSON-LD. Whole API responses, portal contact schemas,

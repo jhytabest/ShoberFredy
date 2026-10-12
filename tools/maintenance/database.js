@@ -9,10 +9,15 @@ import { buildDatabaseMaintenanceReport } from '../../lib/services/maintenance/d
 import { getSettings, upsertSettings } from '../../lib/services/storage/settingsStorage.js';
 import { refreshConfig } from '../../lib/utils.js';
 import { JOBS_USAGE, runJobs } from './jobsCommand.js';
+import { retainAuditPayloads } from '../../lib/services/maintenance/payloadRetention.js';
+import { runMigrations } from '../../lib/services/storage/migrations/migrate.js';
+import { clearExtractionPause } from '../../lib/services/pipeline/llmBudget.js';
 import { JobDocumentError } from '../../lib/services/storage/jobDocument.js';
 
 const USAGE = `Usage:
   yarn maintenance status
+  yarn maintenance prune-audit
+  yarn maintenance resume-llm
   yarn maintenance settings list
   yarn maintenance settings get <name>
   yarn maintenance settings set <name> <json-value>
@@ -43,6 +48,15 @@ if (command === 'status' && args.length === 0) {
     ? buildDatabaseMaintenanceReport(db)
     : { healthy: false, migrations, error: 'Database schema is not current' };
   failed = !result.healthy;
+} else if (command === 'prune-audit' && args.length === 0) {
+  await runMigrations();
+  if (process.exitCode) throw new Error('Migration failed; audit cleanup stopped');
+  result = retainAuditPayloads(db, Date.now(), { timeBudgetMs: Infinity });
+  db.pragma('wal_checkpoint(TRUNCATE)');
+  db.exec('VACUUM');
+} else if (command === 'resume-llm' && args.length === 0) {
+  clearExtractionPause();
+  result = { resumed: true };
 } else if (command === 'settings') {
   result = await runSettings(args);
 } else if (command === 'jobs') {

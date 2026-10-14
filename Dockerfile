@@ -21,7 +21,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /fredy
 
 ENV NODE_ENV=production \
-    IS_DOCKER=true \
     CLOAKBROWSER_SUPPRESS_FONT_WARNING=1
 
 COPY package.json yarn.lock ./

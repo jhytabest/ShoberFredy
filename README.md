@@ -172,7 +172,7 @@ unverifiable deliveries.
 | `listing_verdicts`, `source_rejections`           | Per-job decisions; early card refusals do not become canonical listings.                                                                                                                                   |
 | `listing_claims`, `source_identity_keys`          | Indexed advert identities and source matching, without whole-table JSON scans.                                                                                                                             |
 | `listing_sources`, `listing_source_observations`  | Source URLs, ownership, unique content hashes, byte counts and observation times; shared payload references preserve recent source data.                                                                   |
-| `pipeline_work`, `pipeline_audit_events`          | Durable work and its claims, retries, outcomes, decisions, merges and cancellations. Terminal capture bodies expire after 30 days; unfinished work retains its inputs. Work rows and audit history remain. |
+| `pipeline_work`, `pipeline_audit_events`          | Durable work and its claims, retries, outcomes, decisions, merges and cancellations. Terminal capture bodies and audit history expire after 14 days; unfinished work retains its inputs. Work rows remain. |
 | `runtime_events`                                  | Application logs and named events with credential redaction. Job/settings changes record operation and identity, excluding secret values.                                                                  |
 | `discovery_run_audit`                             | Every finished/skipped source search, rather than an overwritten last-run report.                                                                                                                          |
 | `llm_call_audit`                                  | Attempt groups, ordered model position, provider, timing, usage/cost, refunds, HTTP outcomes, hashes, shared payload references and validation results. Historical bodies are not fabricated.              |
@@ -214,8 +214,10 @@ using the same database mount. This applies migrations, removes expired audit
 history in batches and runs VACUUM; it does not inspect listings or redownload media.
 
 
-Maintenance handles legacy inline bodies incrementally in bounded transactions,
-with a five-second payload-cleanup budget per run. It does not rewrite historical
+Maintenance drains expired audit history in batches of 500, yielding between
+transactions so discovery and delivery can continue. An index covers all payload
+expiry dates, and references are cleared in batches before payload deletion. The
+maintenance work deadline bounds the whole pass. It does not rewrite historical
 rows during startup. SQLite reuses freed pages; optional `FREDY_DB_VACUUM=1` returns
 unused pages to disk. Retention bounds operational history, not total database size:
 durable listing history continues to grow.
@@ -327,7 +329,7 @@ not generated from it; keep the two in sync when the registry changes.
 | -------------------------------------- | -------- | -------------------------------------------------------- |
 | `FREDY_LLM_DAILY_LIMIT`                | `1000`   | Daily LLM request budget (UTC days).                     |
 | `FREDY_LLM_MAX_EMBEDDED_CHARS`         | `24000`  | Cap on embedded JSON sent to the LLM.                    |
-| `FREDY_LLM_MAX_LISTING_FAILURES`       | `5`      | LLM attempts before a listing is abandoned.              |
+| `FREDY_LLM_MAX_LISTING_FAILURES`       | `2`      | LLM attempts before a listing is abandoned.              |
 | `FREDY_LLM_MAX_TEXT_CHARS`             | `24000`  | Cap on captured page text sent to the LLM.               |
 | `FREDY_LLM_REQUEST_TIMEOUT_MS`         | `75000`  | Deadline for a single LLM request.                       |
 | `FREDY_LLM_UPSTREAM_BACKOFF_MS`        | `60000`  | Initial pause after an upstream LLM request failure.     |
@@ -363,7 +365,6 @@ not generated from it; keep the two in sync when the registry changes.
 | -------------------------- | ------------- | --------------------------------------------------------- |
 | `CLOAKBROWSER_BINARY_PATH` | _unset_       | Explicit CloakBrowser Chromium path.                      |
 | `CLOAKBROWSER_CACHE_DIR`   | _unset_       | CloakBrowser download cache directory.                    |
-| `FREDY_DOCKER`             | `false`       | Set by the container image to signal a Docker deployment. |
 | `NODE_ENV`                 | `development` | Node environment; "production" quiets debug logging.      |
 
 ## Local development
@@ -404,7 +405,7 @@ yarn maintenance jobs list
 `status` checks the migration ledger, SQLite integrity, foreign keys, queue
 state, claim coverage, audit relationships, and full-text coverage. Dedupe,
 payload compaction, orphan-media cleanup and optional vacuuming run in scheduled
-upkeep. Work and audit history are retained. `status` runs only when an operator
+upkeep. Work rows remain durable; operational audit history expires after 14 days. `status` runs only when an operator
 explicitly invokes it; the scheduler and `/health` do not run it.
 
 `settings` remains the only write path into the legacy `settings` table. No
@@ -461,9 +462,8 @@ checks, database integrity monitoring or provider probes are scheduled.
 
 ## LLM and geocoding operations
 
-New parse work is preferred briefly. Expired leases and items waiting over an
-hour no longer monopolize processing: eligible work is ordered by its last
-service time, so retries rotate behind work that has waited longer. Network, capacity, rate-limit and provider-configuration
+Eligible parse work is ordered by its last service time, so retries rotate
+behind work that has waited longer. Network, capacity, rate-limit and provider-configuration
 failures defer work without consuming semantic extraction attempts. Resource
 outages are exempt from the item deferral-age cap. Invalid model answers retain
 a bounded retry budget. A reservation refunded after midnight returns to the
@@ -485,18 +485,24 @@ Observing an unchanged work item no longer changes its outcome timestamp; source
 observations retain their own last-seen time.
 
 Extraction uses only `nvidia/nemotron-3-ultra-550b-a55b:free`. There are no model
-selection variables or fallback calls. Each processing attempt sends one request
+selection variables or application-side model fallbacks. OpenRouter may retry
+compatible free providers of that same model. Each processing attempt sends one request
 with one forced `submit_listing` function, compatible-provider filtering and zero
 prompt, completion and request prices. See [OpenRouter tool calling](https://openrouter.ai/docs/guides/features/tool-calling).
-The request schema accepts only passage IDs supplied with that listing; exact
-quotations and sources are restored locally before factual validation.
+The request places citations beside each supported fact or amenity and accepts
+only passage IDs supplied with that listing. Exact quotations and sources are
+restored locally into the existing archive format before factual validation.
+Construction years must occur explicitly in their cited evidence; derivation is
+limited to the documented enum, floor, date and construction-age mappings.
 
 Rate limits and transient upstream failures pause extraction globally and honor
 numeric or HTTP-date Retry-After. Authentication, credit, model and request
 configuration failures stay paused until credentials change or the operator fixes
 the configuration and runs `yarn maintenance resume-llm`. Pending work is retained.
-Invalid extractions consume the semantic budget: five failures or a 24-hour work
-age ends retries. The least recently serviced eligible work is claimed first.
+Invalid extractions consume the semantic budget: by default an initial answer
+and one correction, or a 24-hour work age, ends retries. Validation errors persist
+on the work item and accompany its correction request, including after a restart
+or infrastructure deferral. The least recently serviced eligible work is claimed first.
 API transport is recorded as `response_received`; validation records
 `extraction_valid` or `extraction_invalid` separately from HTTP status.
 
@@ -509,16 +515,14 @@ tracking, unrelated organization metadata and image URLs are excluded. Contact
 lines, email addresses, links and recognizable phone numbers are removed.
 Free text is not guaranteed anonymous: names or personal circumstances may still
 appear in an advert. This is data minimization, not a promise of confidential or
-zero-retention processing. Poolside's free endpoint may use input/output for
-training; NVIDIA's free endpoint has its own logging/data policy. Existing account
-privacy restrictions are respected, never relaxed to make a fallback work.
-See [Poolside](https://openrouter.ai/poolside/laguna-s-2.1:free) and
-[NVIDIA](https://openrouter.ai/nvidia/nemotron-3.5-lightning:free).
+zero-retention processing. NVIDIA's free endpoint has its own logging/data policy.
+Existing account privacy restrictions are respected during provider routing.
+See [NVIDIA Nemotron 3 Ultra](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free).
 
 Evidence is checked for verbatim support and obvious semantic contradictions:
 a warm/total rent alone cannot establish cold rent, one unlabeled figure cannot
 establish both, and renovation alone cannot establish new construction. These
-checks decide whether to accept a response or try the next model; they cannot
+checks decide whether to accept a response or request a correction; they cannot
 prove complete semantic correctness. The model cites passage IDs and the parser
 restores exact quotes before checking only the transmitted evidence. Cold and
 warm rent must be explicitly stated; rent totals are never estimated or calculated.

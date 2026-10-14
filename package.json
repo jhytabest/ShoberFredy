@@ -1,7 +1,7 @@
 {
   "name": "shoberfredy",
   "version": "1.0.0",
-  "description": "Fredy searches ImmoScout24, Immowelt, Kleinanzeigen and WG-Gesucht for German rental listings and delivers them over Telegram.",
+  "description": "Fredy searches ImmoScout24, Kleinanzeigen and WG-Gesucht for German rental listings and delivers them over Telegram.",
   "scripts": {
     "prepare": "husky",
     "start:backend": "NODE_ENV=production node index.js",
@@ -34,7 +34,6 @@
     "rent",
     "immoscout",
     "kleinanzeigen",
-    "immowelt",
     "wg-gesucht",
     "scraper",
     "telegram"
@@ -52,9 +51,7 @@
     "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "cloakbrowser": "0.6.2",
-    "fastify": "^5.12.7",
     "nanoid": "6.0.2",
-    "node-fetch": "3.3.2",
     "p-throttle": "^8.1.1",
     "puppeteer-core": "^25.13.0",
     "query-string": "9.5.1",

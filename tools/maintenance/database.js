@@ -51,7 +51,7 @@ if (command === 'status' && args.length === 0) {
 } else if (command === 'prune-audit' && args.length === 0) {
   await runMigrations();
   if (process.exitCode) throw new Error('Migration failed; audit cleanup stopped');
-  result = retainAuditPayloads(db, Date.now(), { timeBudgetMs: Infinity });
+  result = await retainAuditPayloads(db);
   db.pragma('wal_checkpoint(TRUNCATE)');
   db.exec('VACUUM');
 } else if (command === 'resume-llm' && args.length === 0) {

@@ -471,7 +471,11 @@ day on which it was reserved.
 
 Request failures pause the single extraction service. Transient backoff starts
 at one minute and doubles up to 15 minutes; permanent configuration errors stay
-paused until corrected. One HTTP request has a 75-second deadline, within the
+paused until corrected. Error classification inspects OpenRouter's typed error
+and the provider's raw details, including degraded-provider failures wrapped in
+HTTP 400. An upgrade clears an old indefinite pause only when the audit evidence
+identifies such a transient provider outage; genuine configuration pauses remain.
+One HTTP request has a 75-second deadline, within the
 parser's overall 300-second extraction/finalization deadline. Output is capped
 at 4,096 tokens. Infrastructure outages do not consume semantic failure attempts.
 
@@ -572,6 +576,11 @@ commit cannot record its final event itself, and earlier gaps remain unknown.
 Docker's own container state is the source for such exits.
 
 ## Provider notes
+
+WG-Gesucht discovery reads the current offer-card layout and excludes partner
+ads without a listing identity. Zero cards count as an empty search only when
+the results heading explicitly reports zero offers; an unrecognized layout is
+a retryable provider failure rather than a successful empty discovery.
 
 ImmoScout uses its mobile API. The other providers use CloakBrowser. Every
 provider connects directly: Fredy has no proxy setting and no provider waits on

@@ -493,8 +493,13 @@ selection variables or application-side model fallbacks. OpenRouter may retry
 compatible free providers of that same model. Each processing attempt sends one request
 with one forced `submit_listing` function, compatible-provider filtering and zero
 prompt, completion and request prices. See [OpenRouter tool calling](https://openrouter.ai/docs/guides/features/tool-calling).
-The request places citations beside each supported fact or amenity and accepts
-only passage IDs supplied with that listing. Exact quotations and sources are
+The request places citations beside each supported fact and accepts
+only passage IDs supplied with that listing. Amenities are optional object keys:
+an omitted key is unknown, while either true or false requires a nonempty citation
+list. The decoder restores the existing archived amenity array, so filters and
+notifications retain their representation without a database migration. Object
+keys remove the need for an amenity-array deduplication repair pass.
+Exact quotations and sources are
 restored locally into the existing archive format before factual validation.
 Construction years must occur explicitly in their cited evidence; derivation is
 limited to the documented enum, floor, date and construction-age mappings.
@@ -504,9 +509,13 @@ numeric or HTTP-date Retry-After. Authentication, credit, model and request
 configuration failures stay paused until credentials change or the operator fixes
 the configuration and runs `yarn maintenance resume-llm`. Pending work is retained.
 Invalid extractions consume the semantic budget: by default an initial answer
-and one correction, or a 24-hour work age, ends retries. Validation errors persist
-on the work item and accompany its correction request, including after a restart
-or infrastructure deferral. The least recently serviced eligible work is claimed first.
+and one correction, or a 24-hour work age, ends retries. Validation errors and the
+failed response's audit ID persist on the work item. A correction restores that
+actual assistant tool call and returns the errors as its tool result, including
+after a restart or infrastructure deferral. Old or expired audit references
+retain the error-only correction path. This uses the existing bounded retry;
+there is no separate repair service. The least recently serviced eligible work
+is claimed first.
 API transport is recorded as `response_received`; validation records
 `extraction_valid` or `extraction_invalid` separately from HTTP status.
 
@@ -515,8 +524,15 @@ No historical extraction sweep or notification replay is performed on upgrade.
 
 Model evidence contains sanitized listing passages and explicitly selected
 property fields from JSON-LD. Whole API responses, portal contact schemas,
-tracking, unrelated organization metadata and image URLs are excluded. Contact
-lines, email addresses, links and recognizable phone numbers are removed.
+tracking, unrelated organization metadata and image URLs are excluded.
+
+WG-Gesucht detail capture must find `#basic_ad_details` before extracting text;
+a search page returned for an obsolete query-style advert link is not a detail
+capture and does not reach the LLM. Secret redaction tracks ancestor cycles,
+preserving shared JSON Schema definitions in the audit instead of replacing
+repeated references with a circular marker.
+
+Contact lines, email addresses, links and recognizable phone numbers are removed.
 Free text is not guaranteed anonymous: names or personal circumstances may still
 appear in an advert. This is data minimization, not a promise of confidential or
 zero-retention processing. NVIDIA's free endpoint has its own logging/data policy.

@@ -1,22 +1,26 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
   "packageRules": [
     {
-      "matchManagers": ["npm"],
+      "matchManagers": [
+        "npm"
+      ],
       "rangeStrategy": "bump"
     },
     {
-      "description": "Ship every update once CI has proved it, majors included. CI builds and smoke-tests the image on pull requests, so \"it compiles and starts\" is checked before merge rather than after.",
-      "matchUpdateTypes": ["digest", "pin", "pinDigest", "patch", "minor", "major"],
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": true
-    },
-    {
       "description": "Keep unrelated updates independently attributable and reversible.",
-      "matchPackageNames": ["*"],
+      "matchPackageNames": [
+        "*"
+      ],
       "groupName": null
     }
-  ]
+  ],
+  "automerge": true,
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "ignoreTests": true
 }

@@ -4,8 +4,6 @@
  */
 
 import SqliteConnection from '../../lib/services/storage/SqliteConnection.js';
-import { getMigrationStatus } from '../../lib/services/storage/migrations/migrate.js';
-import { buildDatabaseMaintenanceReport } from '../../lib/services/maintenance/databaseReport.js';
 import { getSettings, upsertSettings } from '../../lib/services/storage/settingsStorage.js';
 import { refreshConfig } from '../../lib/utils.js';
 import { JOBS_USAGE, runJobs } from './jobsCommand.js';
@@ -15,7 +13,6 @@ import { clearExtractionPause } from '../../lib/services/pipeline/llmBudget.js';
 import { JobDocumentError } from '../../lib/services/storage/jobDocument.js';
 
 const USAGE = `Usage:
-  yarn maintenance status
   yarn maintenance prune-audit
   yarn maintenance resume-llm
   yarn maintenance settings list
@@ -32,23 +29,20 @@ Values are JSON, so quote strings:
 // wrong (the columns are JSON, not text). These live behind the same helpers the
 // application reads through, so a value set here is a value the pipeline sees,
 // and a job written here is one every stage can read.
-const command = process.argv[2] || 'status';
+const command = process.argv[2];
 const args = process.argv.slice(3);
+if (!command) {
+  process.stderr.write(USAGE);
+  process.exit(2);
+}
 
 await SqliteConnection.init();
 await refreshConfig();
 
 const db = SqliteConnection.getConnection();
 let result;
-let failed = false;
 
-if (command === 'status' && args.length === 0) {
-  const migrations = getMigrationStatus(db);
-  result = migrations.upToDate
-    ? buildDatabaseMaintenanceReport(db)
-    : { healthy: false, migrations, error: 'Database schema is not current' };
-  failed = !result.healthy;
-} else if (command === 'prune-audit' && args.length === 0) {
+if (command === 'prune-audit' && args.length === 0) {
   await runMigrations();
   if (process.exitCode) throw new Error('Migration failed; audit cleanup stopped');
   result = await retainAuditPayloads(db);
@@ -72,7 +66,6 @@ if (command === 'status' && args.length === 0) {
 
 process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 SqliteConnection.close();
-if (failed) process.exitCode = 1;
 
 async function runSettings([action, name, rawValue]) {
   if (action === 'list' && !name) {

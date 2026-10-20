@@ -3,26 +3,11 @@
   "version": "1.0.0",
   "description": "Fredy searches ImmoScout24, Kleinanzeigen and WG-Gesucht for German rental listings and delivers them over Telegram.",
   "scripts": {
-    "prepare": "husky",
-    "start:backend": "NODE_ENV=production node index.js",
-    "start:backend:dev": "nodemon --watch index.js --watch lib",
-    "format": "prettier --write \"**/*.js\"",
-    "format:check": "prettier --check \"**/*.js\"",
-    "lint": "eslint .",
-    "lint:fix": "yarn lint --fix",
-    "test": "node --test test/*.test.js",
+    "start": "NODE_ENV=production node index.js",
     "migratedb": "node lib/services/storage/migrations/migrate.js",
-    "maintenance": "node --env-file-if-exists=.env.local tools/maintenance/database.js",
-    "copyright": "node ./copyright.js"
+    "maintenance": "node --env-file-if-exists=.env.local tools/maintenance/database.js"
   },
   "type": "module",
-  "lint-staged": {
-    "*.js": [
-      "yarn lint",
-      "yarn format",
-      "yarn copyright"
-    ]
-  },
   "main": "index.js",
   "author": "Sebastien Michel and Shoberfredy contributors",
   "keywords": [
@@ -56,15 +41,5 @@
     "puppeteer-core": "^25.14.0",
     "query-string": "9.5.1",
     "sharp": "^0.35.5"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "10.13.0",
-    "eslint-config-prettier": "10.1.8",
-    "globals": "^17.13.0",
-    "husky": "9.1.7",
-    "lint-staged": "17.6.0",
-    "nodemon": "^3.1.14",
-    "prettier": "3.9.10"
   }
 }

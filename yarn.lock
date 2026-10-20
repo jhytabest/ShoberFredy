@@ -497,10 +497,10 @@ point-in-polygon-hao@^1.1.0:
   dependencies:
     robust-predicates "^3.0.2"
 
-puppeteer-core@^25.14.0:
-  version "25.14.0"
-  resolved "https://registry.yarnpkg.com/puppeteer-core/-/puppeteer-core-25.14.0.tgz#b2527058cf024eda8749c74ace5a9f0916c9c2d8"
-  integrity sha512-LQitnes3tBeVbdZ7V/4iwJPLZGgkl9uBVK0W7YYMh68j/3Y9eNuvj4yl+Fdo7zN0SuajOMrhd7aPj3DifK8k6A==
+puppeteer-core@^25.15.0:
+  version "25.15.0"
+  resolved "https://registry.yarnpkg.com/puppeteer-core/-/puppeteer-core-25.15.0.tgz#ed8f9d6a48db0eabae6d5118e057d457d1f82928"
+  integrity sha512-DEk7S2tlBDp4+iXdnHjFmMofoqVftlz1JO4eyE+oBSiQIfIVTYq8hWF1EsjmRvD49chxGX3oKQT5hX2dnIIDdg==
   dependencies:
     "@puppeteer/browsers" "3.2.5"
     chromium-bidi "157.0.8090-0"

@@ -124,6 +124,12 @@ all recorded receipts and repairs contradictory canonical groups from retained
 per-source extractions. Unassignable historical associations are detached from
 active matching while their audit history remains.
 
+Historical migrations with application dependencies use a checksum-pinned
+implementation in `lib/services/storage/migrations/frozen`. This preserves
+their original behavior when application helpers change. New migrations must
+be self-contained or use immutable migration helpers. Applied migration files,
+their pinned implementations and historical delivery suppression must remain.
+
 Migration records a cutover timestamp. Every pre-existing source is historical;
 every existing canonical listing, including repaired splits, receives durable
 suppression. Pre-cutover unfinished detail/parse/notify work is retired. There

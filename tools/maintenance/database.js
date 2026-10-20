@@ -3,6 +3,8 @@
  * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
  */
 
+import { getPipelineConfig, patchPipelineConfig } from '../../lib/services/storage/pipelineConfigStorage.js';
+import { redact } from '../../lib/services/logger.js';
 import SqliteConnection from '../../lib/services/storage/SqliteConnection.js';
 import { getSettings, upsertSettings } from '../../lib/services/storage/settingsStorage.js';
 import { refreshConfig } from '../../lib/utils.js';
@@ -14,6 +16,8 @@ import { JobDocumentError } from '../../lib/services/storage/jobDocument.js';
 
 const USAGE = `Usage:
   yarn maintenance prune-audit
+  yarn maintenance pipeline show
+  yarn maintenance pipeline patch <json-document>
   yarn maintenance resume-llm
   yarn maintenance settings list
   yarn maintenance settings get <name>
@@ -22,7 +26,7 @@ const USAGE = `Usage:
 ${JOBS_USAGE}
 
 Values are JSON, so quote strings:
-  yarn maintenance jobs set <id> blacklist '["Tausch","Untermiete"]'
+  yarn maintenance pipeline patch '{"filters":{"maxColdRent":2500}}'
 `;
 
 // Settings and jobs written straight into SQLite are invisible and easy to get
@@ -51,6 +55,10 @@ if (command === 'prune-audit' && args.length === 0) {
 } else if (command === 'resume-llm' && args.length === 0) {
   clearExtractionPause();
   result = { resumed: true };
+} else if (command === 'pipeline') {
+  if (args[0] === 'show' && args.length === 1) result = redact(getPipelineConfig());
+  else if (args[0] === 'patch' && args.length === 2) result = patchPipelineConfig(JSON.parse(args[1]));
+  else usageError('Expected pipeline show or pipeline patch <json-document>');
 } else if (command === 'settings') {
   result = await runSettings(args);
 } else if (command === 'jobs') {

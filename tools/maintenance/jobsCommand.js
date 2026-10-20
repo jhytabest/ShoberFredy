@@ -23,21 +23,17 @@ export const JOBS_USAGE = `  yarn maintenance jobs list
   yarn maintenance jobs disable <id>
   yarn maintenance jobs remove <id>
 
-A job document is JSON. Every field it needs to run lives on it — there is no
-deployment-wide default left to inherit:
-  { "name": "München", "city": "München", "interval": 15,
+A job configures discovery only:
+  { "name": "Berlin", "city": "Berlin", "interval": 15,
     "workingHours": { "from": "", "to": "" },
-    "provider": [{ "id": "wgGesucht", "url": "https://...", "maxPages": 3 }],
-    "notify": { "token": "...", "chatId": "-100..." },
-    "blacklist": ["Tausch"], "intentFilter": ["swap"],
-    "specFilter": { "maxPrice": 900 }, "spatialFilter": null }`;
+    "provider": [{ "id": "wgGesucht", "url": "https://...", "maxPages": 3 }] }
+Filters and Telegram settings belong to 'yarn maintenance pipeline show/patch'.`;
 
 export async function runJobs(args, { usageError }) {
   const [action, ...rest] = args;
 
   if (action === 'template' && rest[0] === 'berlin' && rest.length === 2) {
     const document = berlinRentalJob(parseJson(rest[1], 'job document', usageError));
-    if (!document.spatialFilter) return usageError('The Berlin job needs its own spatialFilter polygons');
     await validateJobDocument(document);
     return redactNotify(document);
   }
@@ -99,20 +95,11 @@ function summarize(job) {
     interval: job.interval,
     workingHours: job.workingHours,
     providers: job.provider.map((entry) => entry.id),
-    notify: job.notify ? { ...job.notify, token: '(redacted)' } : null,
-    blacklistTerms: job.blacklist.length,
-    intentFilter: job.intentFilter,
-    specFilter: job.specFilter,
-    hasSpatialFilter: Boolean(job.spatialFilter),
-    activeAccepted: job.numberOfFoundListings,
     lastRunAt: job.lastRunAt,
   };
 }
 
-function redactNotify(job) {
-  if (!job?.notify?.token) return job;
-  return { ...job, notify: { ...job.notify, token: '(redacted)' } };
-}
+function redactNotify(job) { return job; }
 
 function required(job, id, usageError) {
   if (!job) usageError(`No job with id '${id}'`);

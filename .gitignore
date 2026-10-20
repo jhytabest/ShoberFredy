@@ -8,6 +8,4 @@ npm-debug.log
 .vscode
 geocoder.env
 .env.local
-.live-mirror/
 __pycache__/
-.market-venv/

@@ -367,46 +367,32 @@ not generated from it; keep the two in sync when the registry changes.
 | `CLOAKBROWSER_CACHE_DIR`   | _unset_       | CloakBrowser download cache directory.                    |
 | `NODE_ENV`                 | `development` | Node environment; "production" quiets debug logging.      |
 
-## Local development
+## Running from source
 
-Node.js 22 or newer is required.
+Use a Node.js version satisfying `package.json`, install dependencies with
+`yarn install`, set the required secrets, then run `yarn start`.
 
-```bash
-yarn install
-yarn start:backend
-```
-
-Quality checks:
-
-```bash
-yarn format:check
-yarn lint
-```
-
-CI checks the application, builds the Docker image, starts it through the real
-migration path, and requires a healthy `/health` response before publishing.
-
-Do not add test files or run validation unless requested. Preparing a code-only
-PR does not require application, database, container or host execution.
+The release workflow builds and publishes the production image on pushes to
+`main` and version tags. There are no test suites, lint/format hooks, pull-request
+builds or smoke-test jobs. Runtime input checks, schema migrations and the
+container health endpoint remain part of the application.
 
 Keep licence headers and explain non-obvious data or retry invariants near the code.
 
 ## Maintenance
 
 Database upkeep runs automatically as durable pipeline work. The operator
-commands are an on-demand database report, a settings editor, and a job editor:
+commands are a settings editor, a job editor and explicit upkeep actions:
 
 ```bash
-yarn maintenance status
 yarn maintenance settings list
 yarn maintenance jobs list
 ```
 
-`status` checks the migration ledger, SQLite integrity, foreign keys, queue
-state, claim coverage, audit relationships, and full-text coverage. Dedupe,
-payload compaction, orphan-media cleanup and optional vacuuming run in scheduled
-upkeep. Work rows remain durable; operational audit history expires after 14 days. `status` runs only when an operator
-explicitly invokes it; the scheduler and `/health` do not run it.
+Dedupe, payload compaction, orphan-media cleanup and optional vacuuming run in
+scheduled upkeep. Work rows remain durable; operational audit history expires
+after 14 days. `prune-audit` runs retention and compaction on demand;
+`resume-llm` clears the current extraction pause.
 
 `settings` remains the only write path into the legacy `settings` table. No
 part of the application reads proxy configuration any more, from it or from

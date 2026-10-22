@@ -38,7 +38,7 @@
     "cloakbrowser": "0.6.3",
     "nanoid": "6.0.2",
     "p-throttle": "^8.1.1",
-    "puppeteer-core": "^25.15.0",
+    "puppeteer-core": "^25.16.0",
     "query-string": "10.0.0",
     "sharp": "^0.35.5"
   }

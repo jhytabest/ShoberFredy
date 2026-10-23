@@ -39,8 +39,16 @@ Extraction standardizes facts independently of preferences. The current model is
 `nvidia/nemotron-3-ultra-550b-a55b:free`. It uses context to judge Altbau, furnishing,
 condition, tenancy and other semantic features. There is no fixed Altbau year
 cutoff and no citation protocol. Numeric facts must not be invented. Unknown
-facts remain null/unknown/unstated; unknown amenities are omitted. Shape, types,
-basic numeric/date sanity and bounded malformed-output retries are retained.
+facts remain null/unknown/unstated; unknown amenities are omitted. Altbau has a
+dedicated `true`/`false`/`null` feature rather than an amenity checklist entry.
+The offer kind distinguishes residential tenancies, swaps, searches, sales and
+holiday accommodation; location refers to the property rather than the seller.
+Shape, types, basic numeric/date sanity and bounded malformed-output retries
+are retained. A retry receives the preceding validation errors. Contradictory
+auxiliary bedroom/floor-count fields are cleared to unknown and recorded in
+provenance; core rent/date contradictions still fail validation. Useful charge
+details remain in comments/summary. The unreliable separate mandatory-extras
+field and Telegram cost line are retired to avoid counting Nebenkosten twice.
 Captured text, model/version provenance and request/response audits remain
 available for inspection.
 
@@ -55,6 +63,7 @@ recorded on one global `listing_decisions` row. Null/unknown/unstated values pas
 | `minSize` | Known size below 60 m² |
 | `maxColdRent` | Known cold rent above €2,500; warm rent is never substituted |
 | `excludeSwap` | Swap offer |
+| `excludeNonRental` | Known search request, sale, holiday accommodation or other non-tenancy advert; unknown passes |
 | `excludeRooms` | Private/shared room |
 | `excludeSublet` | Sublet |
 | `excludeFixedTerm` | Fixed-term letting |
@@ -85,13 +94,28 @@ settings stop migration instead of silently choosing a destination.
 ## Identity and delivery
 
 Provider IDs and canonical advert URLs establish primary identity. Different
-advert IDs merge only with at least two shared image hashes, compatible market
+advert IDs merge only with at least two shared images, compatible market
 and address, no known room/floor conflict, and known size agreement within 1%
 (capped at 1 m²). When both rents have the same cold/warm basis they must agree
 within 5%. Coordinates and title/price/size equality alone never establish
 identity. Floor can distinguish units while remaining irrelevant to suitability.
-Merge audit events record the claim and shared-image count. Representative
-facts, link and image come from the same source extraction.
+Byte hashes remain useful for exact matches and media storage. Visual matching
+uses versioned 64-bit difference hashes (maximum Hamming distance 6) for two
+independent photos; resized copies of one photo cannot count twice, and nearly
+uniform images are excluded. Compatible candidates are selected by size and
+then checked against all the identity constraints above. Existing retained
+candidate images are fingerprinted on demand; there is no bulk image backfill
+or advert re-extraction. Visual merge audit events retain the matched image IDs,
+fingerprints and distances. Representative facts, link, image and current text
+come from the same source extraction. Previous text remains in observation
+history rather than replacing the current text merely because it was longer.
+
+House-level geocodes require a matching requested street and house number and
+a non-partial rooftop result. A postcode fallback is always coarse. Street
+matching normalizes spelling/abbreviation variants without matching unrelated
+street-name substrings. Coordinates and precision are returned together. The
+updated address-cache namespace validates matches under these rules as normal
+incoming work needs them, without a background geocoding replay.
 
 The outbox has one permanent key per `(canonical listing, chat, topic)`.
 Successful message receipts survive retries and overlapping discoveries cannot
@@ -123,6 +147,17 @@ the shared stream, consolidates source rows, archives job decisions, preserves
 all recorded receipts and repairs contradictory canonical groups from retained
 per-source extractions. Unassignable historical associations are detached from
 active matching while their audit history remains.
+
+Migration 110 adds visual fingerprints and their size-candidate index, enables
+the known non-tenancy exclusion, and repairs post-cutover current text from
+retained representative captures when available. It does not enqueue work, merge
+existing listings, replay extraction, or change cutover suppression/receipts.
+Extraction schema 12 / prompt 10 applies to new/changed adverts and versioned
+retries of failed work. A version bump does not replay unchanged successful
+adverts; pre-cutover identities remain suppressed. Production deployment
+must apply migration 110 with the application stopped before starting this
+revision. Existing duplicate groups and erroneous historical extractions are
+not silently rewritten by this change.
 
 Historical migrations with application dependencies use a checksum-pinned
 implementation in `lib/services/storage/migrations/frozen`. This preserves

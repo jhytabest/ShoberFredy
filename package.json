@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@turf/boolean-point-in-polygon": "^7.4.0",
-    "better-sqlite3": "^13.1.1",
+    "better-sqlite3": "^13.2.0",
     "cheerio": "^1.2.0",
     "cloakbrowser": "0.7.2",
     "nanoid": "6.0.2",
